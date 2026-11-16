@@ -1,84 +1,31 @@
 import { useState } from 'react';
 import { ArrowUpRight, ChevronRight, Newspaper, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-
-type NewsCategory = 'Semua' | 'Fasilitas' | 'Layanan' | 'Produk';
-
-interface NewsArticle {
-  id: string;
-  category: Exclude<NewsCategory, 'Semua'>;
-  date: string;
-  readTime: string;
-  title: string;
-  excerpt: string;
-  image: string;
-  content: string[];
-}
-
-const articles: NewsArticle[] = [
-  {
-    id: 'auditorium-modernisasi',
-    category: 'Fasilitas',
-    date: '14 Nov 2026',
-    readTime: '3 mnt baca',
-    title: 'Modernisasi Sistem Akustik & Reservasi Digital Gedung Auditorium Salatiga',
-    excerpt:
-      'Peningkatan tata suara dan sistem pemesanan terpadu kini memudahkan penyelenggaraan seminar nasional hingga wisuda dengan konfirmasi jadwal real-time.',
-    image: '/src/assets/images/news_auditorium_launch_1794836860155.jpg',
-    content: [
-      'Gedung Auditorium Student Centre di Salatiga resmi mengoperasikan pembaruan panel akustik arsitektural serta sistem pencahayaan panggung hemat energi untuk mendukung beragam agenda akademik maupun publik.',
-      'Melalui kanal Pelayanan Sewa Aset dan Tiket terpadu, panitia acara maupun mitra eksternal kini dapat meninjau ketersediaan tanggal, kapasitas ruang, serta paket dukungan teknis secara transparan.',
-      'Langkah ini menjadi bagian dari komitmen berkelanjutan dalam menghadirkan infrastruktur kegiatan berstandar profesional bagi civitas dan masyarakat luas.',
-    ],
-  },
-  {
-    id: 'klinik-uin-saga',
-    category: 'Layanan',
-    date: '09 Nov 2026',
-    readTime: '4 mnt baca',
-    title: 'Klinik UIN SAGA Perluas Jam Layanan Konsultasi & Pemeriksaan Preventif',
-    excerpt:
-      'Penambahan jadwal praktik dokter umum dan layanan skrining kesehatan berkala hadir untuk meningkatkan akses kesehatan civitas serta warga sekitar.',
-    image: '/src/assets/images/news_klinik_service_1794836860824.jpg',
-    content: [
-      'Klinik UIN SAGA membuka perluasan jam operasional layanan rawat jalan dan pemeriksaan preventif guna menjawab meningkatnya kebutuhan konsultasi kesehatan harian.',
-      'Area tunggu dan ruang konsultasi dirancang ulang dengan partisi kaca higienis dan alur pendaftaran digital agar pasien memperoleh pengalaman layanan yang tenang dan efisien.',
-      'Civitas akademika maupun masyarakat umum dapat memanfaatkan layanan pemeriksaan dasar, konsultasi gizi, serta rujukan terstruktur setiap hari kerja.',
-    ],
-  },
-  {
-    id: 'produk-air-mineral',
-    category: 'Produk',
-    date: '02 Nov 2026',
-    readTime: '3 mnt baca',
-    title: 'Distribusi Air Mineral Kemasan Ramah Lingkungan Resmi Menjangkau Area Kantin',
-    excerpt:
-      'Inisiatif produksi air mineral berstandar higienis tinggi mulai dipasok ke seluruh unit kantin dan kegiatan resmi auditorium kampus.',
-    image: '/src/assets/images/news_air_mineral_1794836860880.jpg',
-    content: [
-      'Unit produksi Air Mineral resmi meluncurkan lini kemasan terbarunya yang mengedepankan proses filtrasi berlapis dan pengawasan mutu laboratorium berkala.',
-      'Seluruh gerai Kantin serta penyelenggaraan acara di Gedung Auditorium kini memperoleh pasokan langsung dengan skema distribusi yang lebih ringkas dan terjangkau.',
-      'Program ini turut mendukung pengurangan limbah kemasan sekali pakai melalui sistem pengumpulan ulang di titik-titik layanan utama.',
-    ],
-  },
-];
+import { allNewsArticles, NewsArticle, NewsCategory } from '../data/news';
 
 const categories: NewsCategory[] = ['Semua', 'Fasilitas', 'Layanan', 'Produk'];
 
-export function NewsSection() {
+interface NewsSectionProps {
+  onViewAllNews: () => void;
+}
+
+export function NewsSection({ onViewAllNews }: NewsSectionProps) {
   const [activeCategory, setActiveCategory] = useState<NewsCategory>('Semua');
   const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   const filteredArticles =
     activeCategory === 'Semua'
-      ? articles
-      : articles.filter((item) => item.category === activeCategory);
+      ? allNewsArticles
+      : allNewsArticles.filter((item) => item.category === activeCategory);
+
+  // Tampilkan maksimal 3 berita terbaru di beranda
+  const latestArticles = filteredArticles.slice(0, 3);
 
   return (
     <section
       id="news-updates"
-      className="w-full flex justify-center px-3 md:px-5 pb-12 md:pb-20 bg-[#f0f0f0]"
+      className="w-full flex justify-center px-3 md:px-5 pb-12 md:pb-20 bg-[#F6F3EC]"
     >
       <div className="w-full max-w-[1536px] flex flex-col gap-8 md:gap-10">
         {/* Header & Category Filter */}
@@ -90,10 +37,10 @@ export function NewsSection() {
           className="px-3 md:px-6 flex flex-col md:flex-row md:items-end justify-between gap-5"
         >
           <div className="flex flex-col gap-2">
-            <span className="text-xs md:text-sm font-normal text-[rgba(30,50,90,0.6)] uppercase tracking-wider">
-              Berita & Informasi
+            <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
+              Berita & Informasi Terbaru
             </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-[56px] font-normal text-[#5E6470] tracking-tight leading-[1.06]">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-[56px] font-normal text-[#164234] tracking-tight leading-[1.06]">
               News & Update
             </h2>
           </div>
@@ -101,7 +48,7 @@ export function NewsSection() {
           <div
             role="tablist"
             aria-label="Filter kategori berita"
-            className="flex items-center gap-1 p-1.5 rounded-full bg-white/55 backdrop-blur-md border border-white/60 w-fit overflow-x-auto"
+            className="flex items-center gap-1 p-1.5 rounded-full bg-white/70 backdrop-blur-md border border-[#C9A45A]/30 w-fit overflow-x-auto"
           >
             {categories.map((category) => {
               const isActive = activeCategory === category;
@@ -114,8 +61,8 @@ export function NewsSection() {
                   onClick={() => setActiveCategory(category)}
                   className={`px-4 py-1.5 rounded-full text-xs md:text-sm font-normal transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                     isActive
-                      ? 'bg-[rgba(30,50,90,0.85)] text-white'
-                      : 'text-[rgba(30,50,90,0.75)] hover:text-[rgba(30,50,90,1)] hover:bg-white/60'
+                      ? 'bg-[#164234] text-[#F6F3EC]'
+                      : 'text-[#3E544B] hover:text-[#164234] hover:bg-[#F6F3EC]/70'
                   }`}
                 >
                   {category}
@@ -125,9 +72,9 @@ export function NewsSection() {
           </div>
         </motion.div>
 
-        {/* News Card Grid */}
+        {/* Max 3 Latest News Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-          {filteredArticles.map((article, index) => (
+          {latestArticles.map((article, index) => (
             <motion.article
               key={article.id}
               initial={{ opacity: 0, y: 20 }}
@@ -143,11 +90,11 @@ export function NewsSection() {
               }}
               tabIndex={0}
               role="button"
-              className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/45 backdrop-blur-xl border border-white/60 p-3.5 md:p-4 flex flex-col gap-4 group cursor-pointer hover:bg-white/65 transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(30,50,90,0.5)]"
+              className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/60 backdrop-blur-xl border border-[#C9A45A]/25 p-3.5 md:p-4 flex flex-col gap-4 group cursor-pointer hover:bg-white/80 hover:border-[#C9A45A]/50 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#164234]"
             >
               {/* Image Container */}
-              <div className="relative w-full aspect-[4/3] rounded-[1.15rem] md:rounded-[1.85rem] overflow-hidden bg-gradient-to-br from-[#e2e6ec] via-[#d7dde6] to-[#cfd7e3]">
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[rgba(30,50,90,0.45)]">
+              <div className="relative w-full aspect-[4/3] rounded-[1.15rem] md:rounded-[1.85rem] overflow-hidden bg-gradient-to-br from-[#EAE5D7] to-[#D4DED6]">
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[#164234]/50">
                   <Newspaper className="w-7 h-7" />
                   <span className="text-xs">{article.category}</span>
                 </div>
@@ -163,16 +110,12 @@ export function NewsSection() {
                     className="relative z-10 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
                   />
                 )}
-
-                <div className="absolute bottom-3 right-3 z-20 w-10 h-10 rounded-full bg-white/80 backdrop-blur-md border border-white/60 flex items-center justify-center group-hover:bg-[rgba(30,50,90,0.9)] transition-colors duration-300">
-                  <ArrowUpRight className="w-4 h-4 text-[rgba(30,50,90,0.9)] group-hover:text-white transition-all duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                </div>
               </div>
 
               {/* Card Body */}
               <div className="px-2 pb-2 flex flex-col gap-2.5 flex-1 justify-between">
                 <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2 text-xs text-[rgba(30,50,90,0.58)] font-normal">
+                  <div className="flex items-center gap-2 text-xs text-[#8F6D26] font-normal">
                     <span>{article.category}</span>
                     <span aria-hidden="true">·</span>
                     <span>{article.date}</span>
@@ -180,22 +123,41 @@ export function NewsSection() {
                     <span>{article.readTime}</span>
                   </div>
 
-                  <h3 className="text-lg md:text-xl font-normal text-[rgba(30,50,90,0.95)] tracking-tight leading-snug">
+                  <h3 className="text-lg md:text-xl font-normal text-[#164234] tracking-tight leading-snug">
                     {article.title}
                   </h3>
 
-                  <p className="text-sm text-[#5E6470] opacity-85 leading-relaxed line-clamp-2">
+                  <p className="text-sm text-[#3E544B] leading-relaxed line-clamp-2">
                     {article.excerpt}
                   </p>
                 </div>
 
-                <div className="pt-2 flex items-center gap-1 text-xs md:text-sm text-[rgba(30,50,90,0.75)] group-hover:text-[rgba(30,50,90,1)] transition-colors">
+                <div className="pt-2 flex items-center gap-1 text-xs md:text-sm text-[#164234]/80 group-hover:text-[#164234] transition-colors">
                   <span>Baca Selengkapnya</span>
-                  <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                  <ChevronRight className="w-4 h-4 text-[#B89242] transition-transform group-hover:translate-x-0.5" />
                 </div>
               </div>
             </motion.article>
           ))}
+        </div>
+
+        {/* Link to Dedicated All News Page */}
+        <div className="flex justify-center pt-2">
+          <motion.a
+            href="#semua-berita"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={(e) => {
+              e.preventDefault();
+              onViewAllNews();
+            }}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white/75 backdrop-blur-xl border border-[#C9A45A]/35 hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] transition-colors group cursor-pointer whitespace-nowrap"
+          >
+            <span className="text-sm font-normal">
+              Lihat Semua Berita ({allNewsArticles.length})
+            </span>
+            <ArrowUpRight className="w-4 h-4 text-[#8F6D26] group-hover:text-[#F4D993] transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </motion.a>
         </div>
       </div>
 
@@ -207,7 +169,7 @@ export function NewsSection() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setSelectedArticle(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/25 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/25 backdrop-blur-sm"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -215,19 +177,19 @@ export function NewsSection() {
               exit={{ opacity: 0, scale: 0.96, y: 12 }}
               transition={{ duration: 0.2 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-3xl bg-white/92 backdrop-blur-2xl border border-white/60 p-5 sm:p-7 md:p-8 text-[rgba(30,50,90,0.95)] shadow-lg relative"
+              className="w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-3xl bg-[#FAF8F3]/95 backdrop-blur-2xl border border-[#C9A45A]/30 p-5 sm:p-7 md:p-8 text-[#164234] shadow-lg relative"
             >
               <button
                 type="button"
                 onClick={() => setSelectedArticle(null)}
                 aria-label="Tutup berita"
-                className="absolute top-5 right-5 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white border border-[rgba(30,50,90,0.1)] flex items-center justify-center transition-colors cursor-pointer"
+                className="absolute top-5 right-5 z-10 w-8 h-8 rounded-full bg-white/85 hover:bg-white border border-[#C9A45A]/30 flex items-center justify-center transition-colors cursor-pointer"
               >
-                <X className="w-4 h-4 text-[rgba(30,50,90,0.85)]" />
+                <X className="w-4 h-4 text-[#164234]" />
               </button>
 
               {!failedImages[selectedArticle.id] && (
-                <div className="w-full aspect-[16/9] rounded-2xl overflow-hidden mb-5 bg-[#e2e6ec]">
+                <div className="w-full aspect-[16/9] rounded-2xl overflow-hidden mb-5 bg-[#EAE5D7]">
                   <img
                     src={selectedArticle.image}
                     alt={selectedArticle.title}
@@ -237,7 +199,7 @@ export function NewsSection() {
                 </div>
               )}
 
-              <div className="flex items-center gap-2 text-xs text-[rgba(30,50,90,0.58)] mb-2">
+              <div className="flex items-center gap-2 text-xs text-[#8F6D26] mb-2">
                 <span>{selectedArticle.category}</span>
                 <span aria-hidden="true">·</span>
                 <span>{selectedArticle.date}</span>
@@ -249,7 +211,7 @@ export function NewsSection() {
                 {selectedArticle.title}
               </h3>
 
-              <div className="flex flex-col gap-3 text-sm md:text-base text-[rgba(30,50,90,0.78)] leading-relaxed mb-6">
+              <div className="flex flex-col gap-3 text-sm md:text-base text-[#3E544B] leading-relaxed mb-6">
                 {selectedArticle.content.map((paragraph) => (
                   <p key={paragraph}>{paragraph}</p>
                 ))}
@@ -258,7 +220,7 @@ export function NewsSection() {
               <button
                 type="button"
                 onClick={() => setSelectedArticle(null)}
-                className="px-6 py-2.5 rounded-full bg-[rgba(30,50,90,0.85)] hover:bg-[rgba(30,50,90,1)] text-white text-sm font-normal transition-colors cursor-pointer"
+                className="px-6 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors cursor-pointer"
               >
                 Tutup Artikel
               </button>
