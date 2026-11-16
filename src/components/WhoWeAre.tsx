@@ -20,7 +20,7 @@ const focusCards: FocusCardData[] = [
     subtitle: 'Auditorium, Sewa Aset, Klinik UIN SAGA & Kantin',
     linkLabel: 'Jelajahi Aset & Layanan',
     href: '#layanan-aset',
-    image: '/src/assets/images/p2b_optimalisasi_aset_1794837551755.jpg',
+    image: 'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/uin-water.webp',
     description:
       'P2B UIN Salatiga mengelola aset dan unit layanan komersial universitas—mulai dari Gedung Auditorium, fasilitas sewa ruang, produk Air Mineral, hingga Klinik UIN SAGA dan Kantin—dengan tata kelola PTN BLU yang transparan dan berorientasi kepuasan pelanggan.',
     highlights: [
@@ -35,7 +35,7 @@ const focusCards: FocusCardData[] = [
     subtitle: 'Kolaborasi strategis & magang profesional',
     linkLabel: 'Lihat Program Kemitraan',
     href: '#kemitraan-talenta',
-    image: '/src/assets/images/p2b_kemitraan_talenta_1794837552853.jpg',
+    image: 'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2025/01/2025-Slider-2.png',
     description:
       'Sebagai penggerak ekosistem entrepreneurial university, P2B menjembatani kolaborasi bersama dunia industri, pemerintah, alumni, dan masyarakat sekaligus menghadirkan ruang praktik nyata bagi mahasiswa UIN Salatiga.',
     highlights: [

@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { ArrowLeft, ChevronRight, Newspaper, Search, X } from 'lucide-react';
+import { ChevronRight, Newspaper, Search, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { allNewsArticles, NewsArticle, NewsCategory } from '../data/news';
+import { PageHero } from './PageHero';
 import { Footer } from './Footer';
 
 const categories: NewsCategory[] = ['Semua', 'Fasilitas', 'Layanan', 'Produk'];
 
 interface AllNewsPageProps {
   onBackHome: () => void;
+  onNavigateSection: (target: 'top' | 'who-we-are' | 'news-updates' | 'lokasi-p2b') => void;
 }
 
-export function AllNewsPage({ onBackHome }: AllNewsPageProps) {
+export function AllNewsPage({ onBackHome, onNavigateSection }: AllNewsPageProps) {
   const [activeCategory, setActiveCategory] = useState<NewsCategory>('Semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
@@ -31,63 +33,26 @@ export function AllNewsPage({ onBackHome }: AllNewsPageProps) {
 
   return (
     <div className="min-h-screen bg-[#F6F3EC] flex flex-col">
-      {/* Top Glassmorphism Bar */}
-      <header className="w-full flex justify-center px-3 md:px-5 pt-3 md:pt-5">
-        <div className="w-full max-w-[1536px] rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 px-5 sm:px-8 py-4 flex items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={onBackHome}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] text-xs sm:text-sm font-normal transition-colors cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Kembali ke Beranda</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onBackHome}
-            aria-label="Beranda P2B UIN Salatiga"
-            className="hidden sm:inline-flex items-center cursor-pointer shrink-0"
-          >
-            <img
-              src="https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/Logo.webp"
-              alt="Logo Pusat Pengembangan Bisnis UIN Salatiga"
-              referrerPolicy="no-referrer"
-              className="h-8 md:h-9 w-auto object-contain"
-            />
-          </button>
-
-          <span className="text-xs sm:text-sm text-[#8F6D26] font-normal tabular-nums whitespace-nowrap shrink-0">
-            {filteredArticles.length} Artikel
-          </span>
-        </div>
-      </header>
+      <PageHero
+        eyebrow="Arsip Berita Resmi · P2B UIN Salatiga"
+        title="Semua Berita & Update"
+        subtitle="Kumpulan lengkap rilis kegiatan, pengembangan fasilitas, inovasi layanan komersial, serta program kemitraan Pusat Pengembangan Bisnis UIN Salatiga."
+        cornerLabel="Beranda Utama"
+        cornerActionLabel="Kembali ke Beranda"
+        cornerHref="#top"
+        onCornerClick={onBackHome}
+      />
 
       {/* Main Archive Content */}
       <section className="w-full flex justify-center px-3 md:px-5 pt-10 md:pt-14 pb-12 md:pb-20 flex-1">
         <div className="w-full max-w-[1536px] flex flex-col gap-8 md:gap-10">
-          {/* Page Intro + Controls */}
+          {/* Controls */}
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="px-3 md:px-6 flex flex-col gap-6"
+            className="px-3 md:px-6 flex flex-col gap-4"
           >
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-              <div className="flex flex-col gap-2">
-                <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
-                  Arsip Berita Resmi · P2B UIN Salatiga
-                </span>
-                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[60px] font-normal text-[#164234] tracking-tight leading-[1.06]">
-                  Semua Berita & Update
-                </h1>
-              </div>
-
-              <p className="text-sm sm:text-base text-[#3E544B] max-w-md leading-relaxed">
-                Kumpulan lengkap rilis kegiatan, pengembangan fasilitas, inovasi layanan komersial, serta program kemitraan Pusat Pengembangan Bisnis UIN Salatiga.
-              </p>
-            </div>
-
             {/* Filter & Search Toolbar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div
@@ -229,12 +194,7 @@ export function AllNewsPage({ onBackHome }: AllNewsPageProps) {
             window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
           }
-          onBackHome();
-          if (target !== 'top') {
-            window.setTimeout(() => {
-              document.getElementById(target)?.scrollIntoView({ behavior: 'smooth' });
-            }, 80);
-          }
+          onNavigateSection(target);
         }}
       />
 

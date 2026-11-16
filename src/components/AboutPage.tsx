@@ -1,11 +1,11 @@
-import { ArrowLeft, ArrowUpRight, Building2, Handshake, ShieldCheck, Sparkles } from 'lucide-react';
+import { Building2, Handshake, ShieldCheck, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
+import { PageHero } from './PageHero';
 import { Footer } from './Footer';
 
 interface AboutPageProps {
-  onBackHome: () => void;
+  onOpenVisiMisi: () => void;
   onNavigateSection: (target: 'top' | 'who-we-are' | 'news-updates' | 'lokasi-p2b') => void;
-  onOpenAllNews: () => void;
 }
 
 const governanceValues = [
@@ -35,52 +35,18 @@ const governanceValues = [
   },
 ];
 
-export function AboutPage({
-  onBackHome,
-  onNavigateSection,
-  onOpenAllNews,
-}: AboutPageProps) {
+export function AboutPage({ onOpenVisiMisi, onNavigateSection }: AboutPageProps) {
   return (
     <div className="min-h-screen bg-[#F6F3EC] flex flex-col">
-      {/* Top Glassmorphism Bar */}
-      <header className="w-full flex justify-center px-3 md:px-5 pt-3 md:pt-5">
-        <div className="w-full max-w-[1536px] rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 px-5 sm:px-8 py-4 flex items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={onBackHome}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] text-xs sm:text-sm font-normal transition-colors cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Kembali ke Beranda</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onBackHome}
-            aria-label="Beranda P2B UIN Salatiga"
-            className="hidden sm:inline-flex items-center cursor-pointer shrink-0"
-          >
-            <img
-              src="https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/Logo.webp"
-              alt="Logo Pusat Pengembangan Bisnis UIN Salatiga"
-              referrerPolicy="no-referrer"
-              className="h-8 md:h-9 w-auto object-contain"
-            />
-          </button>
-
-          <a
-            href="#semua-berita"
-            onClick={(e) => {
-              e.preventDefault();
-              onOpenAllNews();
-            }}
-            className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-[#8F6D26] hover:text-[#164234] font-normal transition-colors whitespace-nowrap shrink-0"
-          >
-            <span>News & Update</span>
-            <ArrowUpRight className="w-4 h-4" />
-          </a>
-        </div>
-      </header>
+      <PageHero
+        eyebrow="Tentang Kami · Profil Resmi"
+        title="Pusat Pengembangan Bisnis"
+        subtitle="Penggerak pengembangan bisnis, optimalisasi aset, layanan komersial, serta ekosistem entrepreneurial university UIN Salatiga."
+        cornerLabel="Arah Strategis"
+        cornerActionLabel="Visi & Misi P2B"
+        cornerHref="#visi-misi"
+        onCornerClick={onOpenVisiMisi}
+      />
 
       {/* Main Content */}
       <main className="w-full flex justify-center px-3 md:px-5 pt-10 md:pt-14 pb-12 md:pb-20 flex-1">
@@ -88,17 +54,18 @@ export function AboutPage({
           {/* Intro Editorial Section */}
           <motion.section
             initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.15 }}
             transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
             className="rounded-[1.5rem] md:rounded-[3rem] bg-white/60 backdrop-blur-xl border border-[#C9A45A]/30 p-6 sm:p-10 md:p-14 flex flex-col gap-8"
           >
-            <div className="flex flex-col gap-3 max-w-4xl">
+            <div className="flex flex-col gap-2 max-w-4xl">
               <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
-                Tentang Kami · Profil Resmi
+                Profil Kelembagaan · PTN BLU
               </span>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[60px] font-normal text-[#164234] tracking-tight leading-[1.06] text-balance">
-                Pusat Pengembangan Bisnis (P2B) UIN Salatiga
-              </h1>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight leading-[1.12]">
+                Mengenal Pusat Pengembangan Bisnis (P2B) UIN Salatiga
+              </h2>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10 text-sm sm:text-base md:text-[17px] text-[#3E544B] leading-relaxed">
@@ -132,7 +99,7 @@ export function AboutPage({
           >
             <div className="relative aspect-[4/3] rounded-[1.5rem] md:rounded-[3rem] overflow-hidden border border-[#C9A45A]/25 bg-[#EAE5D7]">
               <img
-                src="/src/assets/images/p2b_optimalisasi_aset_1794837551755.jpg"
+                src="https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/uin-water.webp"
                 alt="Optimalisasi Aset & Fasilitas P2B UIN Salatiga"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
@@ -140,7 +107,7 @@ export function AboutPage({
             </div>
             <div className="relative aspect-[4/3] rounded-[1.5rem] md:rounded-[3rem] overflow-hidden border border-[#C9A45A]/25 bg-[#EAE5D7]">
               <img
-                src="/src/assets/images/p2b_kemitraan_talenta_1794837552853.jpg"
+                src="https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2025/01/2025-Slider-2.png"
                 alt="Kolaborasi & Talenta Mahasiswa P2B UIN Salatiga"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
