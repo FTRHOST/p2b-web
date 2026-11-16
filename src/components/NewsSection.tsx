@@ -93,13 +93,25 @@ export function NewsSection({ onViewAllNews }: NewsSectionProps) {
               className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/60 backdrop-blur-xl border border-[#C9A45A]/25 p-3.5 md:p-4 flex flex-col gap-4 group cursor-pointer hover:bg-white/80 hover:border-[#C9A45A]/50 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#164234]"
             >
               {/* Image Container */}
-              <div className="relative w-full aspect-[4/3] rounded-[1.15rem] md:rounded-[1.85rem] overflow-hidden bg-gradient-to-br from-[#EAE5D7] to-[#D4DED6]">
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[#164234]/50">
-                  <Newspaper className="w-7 h-7" />
-                  <span className="text-xs">{article.category}</span>
-                </div>
-
-                {!failedImages[article.id] && (
+              <div className="relative w-full aspect-[4/3] rounded-[1.15rem] md:rounded-[1.85rem] overflow-hidden bg-gradient-to-br from-[#F4EFE3] via-[#EAE5D7] to-[#D9E2DA] flex items-center justify-center">
+                {failedImages[article.id] ? (
+                  <div className="flex flex-col items-center justify-center gap-2 text-[#164234]/50">
+                    <Newspaper className="w-7 h-7" />
+                    <span className="text-xs">{article.category}</span>
+                  </div>
+                ) : article.isLogoPlaceholder ? (
+                  <div className="w-full h-full flex items-center justify-center p-8 md:p-10">
+                    <img
+                      src={article.image}
+                      alt={article.title}
+                      referrerPolicy="no-referrer"
+                      onError={() =>
+                        setFailedImages((prev) => ({ ...prev, [article.id]: true }))
+                      }
+                      className="max-h-24 sm:max-h-28 md:max-h-32 w-auto object-contain transition-transform duration-500 ease-out group-hover:scale-[1.05]"
+                    />
+                  </div>
+                ) : (
                   <img
                     src={article.image}
                     alt={article.title}
@@ -107,7 +119,7 @@ export function NewsSection({ onViewAllNews }: NewsSectionProps) {
                     onError={() =>
                       setFailedImages((prev) => ({ ...prev, [article.id]: true }))
                     }
-                    className="relative z-10 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+                    className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
                   />
                 )}
               </div>
@@ -189,12 +201,16 @@ export function NewsSection({ onViewAllNews }: NewsSectionProps) {
               </button>
 
               {!failedImages[selectedArticle.id] && (
-                <div className="w-full aspect-[16/9] rounded-2xl overflow-hidden mb-5 bg-[#EAE5D7]">
+                <div className="w-full aspect-[16/9] rounded-2xl overflow-hidden mb-5 bg-gradient-to-br from-[#F4EFE3] via-[#EAE5D7] to-[#D9E2DA] flex items-center justify-center">
                   <img
                     src={selectedArticle.image}
                     alt={selectedArticle.title}
                     referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover"
+                    className={
+                      selectedArticle.isLogoPlaceholder
+                        ? 'max-h-28 sm:max-h-36 w-auto object-contain p-4'
+                        : 'w-full h-full object-cover'
+                    }
                   />
                 </div>
               )}

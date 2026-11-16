@@ -77,10 +77,11 @@ const legalDocs: Record<string, LegalDoc> = {
 };
 
 const socialLinks = [
-  { label: 'Instagram', handle: '@p2b.uinsalatiga', href: '#social-instagram' },
-  { label: 'YouTube', handle: 'UIN Salatiga Official', href: '#social-youtube' },
-  { label: 'LinkedIn', handle: 'P2B UIN Salatiga', href: '#social-linkedin' },
-  { label: 'Portal UIN', handle: 'uinsalatiga.ac.id', href: '#social-portal' },
+  {
+    label: 'Instagram',
+    handle: '@p2b.uinsalatiga',
+    href: 'https://www.instagram.com/p2b.uinsalatiga',
+  },
 ];
 
 const navigationLinks = [
@@ -99,7 +100,6 @@ export function Footer({ onNavigate }: FooterProps) {
   const [error, setError] = useState('');
   const [subscribedEmail, setSubscribedEmail] = useState<string | null>(null);
   const [activeLegal, setActiveLegal] = useState<LegalDoc | null>(null);
-  const [activeSocial, setActiveSocial] = useState<{ label: string; handle: string } | null>(null);
 
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();
@@ -244,10 +244,8 @@ export function Footer({ onNavigate }: FooterProps) {
                   <li key={item.label}>
                     <a
                       href={item.href}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setActiveSocial({ label: item.label, handle: item.handle });
-                      }}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-[#3E544B] hover:text-[#164234] transition-colors group whitespace-nowrap"
                     >
                       <span>{item.label}</span>
@@ -368,55 +366,6 @@ export function Footer({ onNavigate }: FooterProps) {
                 className="w-full py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors cursor-pointer"
               >
                 Tutup
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Social Channel Modal */}
-      <AnimatePresence>
-        {activeSocial && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setActiveSocial(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/25 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 10 }}
-              transition={{ duration: 0.2 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-3xl bg-[#FAF8F3]/95 backdrop-blur-2xl border border-[#C9A45A]/30 p-6 text-[#164234] shadow-lg relative"
-            >
-              <button
-                type="button"
-                onClick={() => setActiveSocial(null)}
-                aria-label="Tutup kanal sosial"
-                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[rgba(22,66,52,0.15)] flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4 text-[#164234]" />
-              </button>
-
-              <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
-                Kanal Resmi P2B
-              </span>
-              <h3 className="text-xl font-normal tracking-tight mt-1 mb-1">
-                {activeSocial.label}
-              </h3>
-              <p className="text-sm text-[#3E544B] mb-5">
-                Akun: {activeSocial.handle}
-              </p>
-
-              <button
-                type="button"
-                onClick={() => setActiveSocial(null)}
-                className="w-full py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors cursor-pointer"
-              >
-                Selesai
               </button>
             </motion.div>
           </motion.div>
