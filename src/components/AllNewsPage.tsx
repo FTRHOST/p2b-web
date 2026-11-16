@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { ChevronRight, Newspaper, Search, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { allNewsArticles, NewsArticle, NewsCategory } from '../data/news';
+import { ChevronRight, Newspaper, Search } from 'lucide-react';
+import { motion } from 'motion/react';
+import { allNewsArticles, NewsCategory } from '../data/news';
 import { PageHero } from './PageHero';
 import { Footer } from './Footer';
 
@@ -9,13 +9,17 @@ const categories: NewsCategory[] = ['Semua', 'Fasilitas', 'Layanan', 'Produk'];
 
 interface AllNewsPageProps {
   onBackHome: () => void;
+  onSelectArticle: (articleId: string) => void;
   onNavigateSection: (target: 'top' | 'who-we-are' | 'news-updates' | 'lokasi-p2b') => void;
 }
 
-export function AllNewsPage({ onBackHome, onNavigateSection }: AllNewsPageProps) {
+export function AllNewsPage({
+  onBackHome,
+  onSelectArticle,
+  onNavigateSection,
+}: AllNewsPageProps) {
   const [activeCategory, setActiveCategory] = useState<NewsCategory>('Semua');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -125,11 +129,11 @@ export function AllNewsPage({ onBackHome, onNavigateSection }: AllNewsPageProps)
                     delay: index * 0.05,
                     ease: [0.16, 1, 0.3, 1],
                   }}
-                  onClick={() => setSelectedArticle(article)}
+                  onClick={() => onSelectArticle(article.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setSelectedArticle(article);
+                      onSelectArticle(article.id);
                     }
                   }}
                   tabIndex={0}
@@ -210,77 +214,6 @@ export function AllNewsPage({ onBackHome, onNavigateSection }: AllNewsPageProps)
         }}
       />
 
-      {/* Article Reader Modal */}
-      <AnimatePresence>
-        {selectedArticle && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setSelectedArticle(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/25 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 12 }}
-              transition={{ duration: 0.2 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-3xl bg-[#FAF8F3]/95 backdrop-blur-2xl border border-[#C9A45A]/30 p-5 sm:p-7 md:p-8 text-[#164234] shadow-lg relative"
-            >
-              <button
-                type="button"
-                onClick={() => setSelectedArticle(null)}
-                aria-label="Tutup berita"
-                className="absolute top-5 right-5 z-10 w-8 h-8 rounded-full bg-white/85 hover:bg-white border border-[#C9A45A]/30 flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4 text-[#164234]" />
-              </button>
-
-              {!failedImages[selectedArticle.id] && (
-                <div className="w-full aspect-[16/9] rounded-2xl overflow-hidden mb-5 bg-gradient-to-br from-[#F4EFE3] via-[#EAE5D7] to-[#D9E2DA] flex items-center justify-center">
-                  <img
-                    src={selectedArticle.image}
-                    alt={selectedArticle.title}
-                    referrerPolicy="no-referrer"
-                    className={
-                      selectedArticle.isLogoPlaceholder
-                        ? 'max-h-28 sm:max-h-36 w-auto object-contain p-4'
-                        : 'w-full h-full object-cover'
-                    }
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 text-xs text-[#8F6D26] mb-2">
-                <span>{selectedArticle.category}</span>
-                <span aria-hidden="true">·</span>
-                <span>{selectedArticle.date}</span>
-                <span aria-hidden="true">·</span>
-                <span>{selectedArticle.readTime}</span>
-              </div>
-
-              <h3 className="text-xl sm:text-2xl md:text-3xl font-normal tracking-tight leading-snug mb-4">
-                {selectedArticle.title}
-              </h3>
-
-              <div className="flex flex-col gap-3 text-sm md:text-base text-[#3E544B] leading-relaxed mb-6">
-                {selectedArticle.content.map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedArticle(null)}
-                className="px-6 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors cursor-pointer"
-              >
-                Tutup Artikel
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

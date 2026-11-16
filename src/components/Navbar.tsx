@@ -7,7 +7,8 @@ export type NavPageTarget =
   | 'about'
   | 'visi-misi'
   | 'struktur-organisasi'
-  | 'all-news';
+  | 'all-news'
+  | 'news-detail';
 
 interface NavDropdownItem {
   title: string;

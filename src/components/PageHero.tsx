@@ -36,7 +36,7 @@ export function PageHero({
         initial={{ opacity: 0, scale: 0.99 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[1536px] h-[440px] sm:h-[500px] md:h-[540px] rounded-[1.5rem] md:rounded-[3rem] overflow-hidden flex flex-col items-center justify-center border border-[#C9A45A]/20"
+        className="relative w-full max-w-[1536px] min-h-[440px] sm:min-h-[500px] md:min-h-[540px] rounded-[1.5rem] md:rounded-[3rem] overflow-hidden flex flex-col items-center justify-center border border-[#C9A45A]/20"
       >
         {/* Emerald fallback */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#0B261D] via-[#164234] to-[#1E5644] z-0" />

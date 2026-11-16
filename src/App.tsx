@@ -15,16 +15,33 @@ import { AllNewsPage } from './components/AllNewsPage';
 import { AboutPage } from './components/AboutPage';
 import { VisiMisiPage } from './components/VisiMisiPage';
 import { StrukturOrganisasiPage } from './components/StrukturOrganisasiPage';
+import { NewsDetailPage } from './components/NewsDetailPage';
+import { allNewsArticles } from './data/news';
 
-function getPageViewFromHash(hash: string): NavPageTarget {
-  if (hash === '#semua-berita') return 'all-news';
-  if (hash === '#tentang-kami') return 'about';
-  if (hash === '#visi-misi') return 'visi-misi';
-  if (hash === '#struktur-organisasi') return 'struktur-organisasi';
-  return 'home';
+interface RouteState {
+  page: NavPageTarget;
+  articleId: string | null;
 }
 
-const pageToHash: Record<NavPageTarget, string> = {
+function getRouteFromHash(hash: string): RouteState {
+  if (hash.startsWith('#berita/')) {
+    const id = hash.replace('#berita/', '').trim();
+    const exists = allNewsArticles.some((item) => item.id === id);
+    if (exists) {
+      return { page: 'news-detail', articleId: id };
+    }
+    return { page: 'all-news', articleId: null };
+  }
+  if (hash === '#semua-berita') return { page: 'all-news', articleId: null };
+  if (hash === '#tentang-kami') return { page: 'about', articleId: null };
+  if (hash === '#visi-misi') return { page: 'visi-misi', articleId: null };
+  if (hash === '#struktur-organisasi') {
+    return { page: 'struktur-organisasi', articleId: null };
+  }
+  return { page: 'home', articleId: null };
+}
+
+const pageToHash: Record<Exclude<NavPageTarget, 'news-detail'>, string> = {
   home: '',
   about: '#tentang-kami',
   'visi-misi': '#visi-misi',
@@ -33,25 +50,35 @@ const pageToHash: Record<NavPageTarget, string> = {
 };
 
 export default function App() {
-  const [pageView, setPageView] = useState<NavPageTarget>(() =>
-    getPageViewFromHash(window.location.hash)
+  const [route, setRoute] = useState<RouteState>(() =>
+    getRouteFromHash(window.location.hash)
   );
 
   useEffect(() => {
     const syncFromHash = () => {
-      setPageView(getPageViewFromHash(window.location.hash));
+      setRoute(getRouteFromHash(window.location.hash));
     };
     window.addEventListener('hashchange', syncFromHash);
     return () => window.removeEventListener('hashchange', syncFromHash);
   }, []);
 
   const navigateToPage = (target: NavPageTarget) => {
+    if (target === 'news-detail') {
+      navigateToPage('all-news');
+      return;
+    }
     if (target === 'home') {
       window.history.pushState(null, '', window.location.pathname);
     } else {
       window.location.hash = pageToHash[target];
     }
-    setPageView(target);
+    setRoute({ page: target, articleId: null });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToArticle = (articleId: string) => {
+    window.location.hash = `#berita/${articleId}`;
+    setRoute({ page: 'news-detail', articleId });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -74,26 +101,40 @@ export default function App() {
     }
   };
 
+  const selectedArticle =
+    route.page === 'news-detail' && route.articleId
+      ? allNewsArticles.find((item) => item.id === route.articleId) ??
+        allNewsArticles[0]
+      : null;
+
   return (
     <MotionConfig reducedMotion="user">
-      <Navbar currentPage={pageView} onNavigatePage={navigateToPage} />
+      <Navbar currentPage={route.page} onNavigatePage={navigateToPage} />
 
-      {pageView === 'all-news' ? (
-        <AllNewsPage
-          onBackHome={() => navigateToPage('home')}
+      {route.page === 'news-detail' && selectedArticle ? (
+        <NewsDetailPage
+          article={selectedArticle}
+          onOpenAllNews={() => navigateToPage('all-news')}
+          onSelectArticle={navigateToArticle}
           onNavigateSection={navigateToSection}
         />
-      ) : pageView === 'about' ? (
+      ) : route.page === 'all-news' ? (
+        <AllNewsPage
+          onBackHome={() => navigateToPage('home')}
+          onSelectArticle={navigateToArticle}
+          onNavigateSection={navigateToSection}
+        />
+      ) : route.page === 'about' ? (
         <AboutPage
           onOpenVisiMisi={() => navigateToPage('visi-misi')}
           onNavigateSection={navigateToSection}
         />
-      ) : pageView === 'visi-misi' ? (
+      ) : route.page === 'visi-misi' ? (
         <VisiMisiPage
           onOpenStruktur={() => navigateToPage('struktur-organisasi')}
           onNavigateSection={navigateToSection}
         />
-      ) : pageView === 'struktur-organisasi' ? (
+      ) : route.page === 'struktur-organisasi' ? (
         <StrukturOrganisasiPage
           onOpenAbout={() => navigateToPage('about')}
           onNavigateSection={navigateToSection}
@@ -102,7 +143,10 @@ export default function App() {
         <main className="min-h-screen bg-[#F6F3EC]">
           <Hero onOpenAbout={() => navigateToPage('about')} />
           <WhoWeAre />
-          <NewsSection onViewAllNews={() => navigateToPage('all-news')} />
+          <NewsSection
+            onViewAllNews={() => navigateToPage('all-news')}
+            onSelectArticle={navigateToArticle}
+          />
           <LocationSection />
           <Footer
             onNavigate={(target) => {
