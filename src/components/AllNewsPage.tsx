@@ -1,11 +1,30 @@
-import { useState } from 'react';
-import { ChevronRight, Newspaper, Search } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Newspaper, Search } from 'lucide-react';
 import { motion } from 'motion/react';
 import { allNewsArticles, NewsCategory } from '../data/news';
 import { PageHero } from './PageHero';
 import { Footer } from './Footer';
 
 const categories: NewsCategory[] = ['Semua', 'Fasilitas', 'Layanan', 'Produk'];
+const ITEMS_PER_PAGE = 6;
+
+function getPageNumbers(currentPage: number, totalPages: number): (number | 'ellipsis')[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, idx) => idx + 1);
+  }
+  const pages: (number | 'ellipsis')[] = [1];
+  if (currentPage > 3) pages.push('ellipsis');
+
+  const start = Math.max(2, currentPage - 1);
+  const end = Math.min(totalPages - 1, currentPage + 1);
+  for (let p = start; p <= end; p++) {
+    pages.push(p);
+  }
+
+  if (currentPage < totalPages - 2) pages.push('ellipsis');
+  pages.push(totalPages);
+  return pages;
+}
 
 interface AllNewsPageProps {
   onBackHome: () => void;
@@ -18,8 +37,10 @@ export function AllNewsPage({
   onSelectArticle,
   onNavigateSection,
 }: AllNewsPageProps) {
+  const archiveSectionRef = useRef<HTMLElement | null>(null);
   const [activeCategory, setActiveCategory] = useState<NewsCategory>('Semua');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -35,6 +56,31 @@ export function AllNewsPage({
     return matchesCategory && matchesQuery;
   });
 
+  const totalPages = Math.ceil(filteredArticles.length / ITEMS_PER_PAGE);
+  const safePage = Math.min(currentPage, Math.max(totalPages, 1));
+  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+  const paginatedArticles = filteredArticles.slice(
+    startIndex,
+    startIndex + ITEMS_PER_PAGE
+  );
+  const pageNumbers = getPageNumbers(safePage, totalPages);
+
+  const handleCategoryChange = (category: NewsCategory) => {
+    setActiveCategory(category);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages || nextPage === safePage) return;
+    setCurrentPage(nextPage);
+    archiveSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <div className="min-h-screen bg-[#F6F3EC] flex flex-col">
       <PageHero
@@ -48,7 +94,10 @@ export function AllNewsPage({
       />
 
       {/* Main Archive Content */}
-      <section className="w-full flex justify-center px-3 md:px-5 pt-10 md:pt-14 pb-12 md:pb-20 flex-1">
+      <section
+        ref={archiveSectionRef}
+        className="w-full flex justify-center px-3 md:px-5 pt-10 md:pt-14 pb-12 md:pb-20 flex-1 scroll-mt-24"
+      >
         <div className="w-full max-w-[1536px] flex flex-col gap-8 md:gap-10">
           {/* Controls */}
           <motion.div
@@ -72,7 +121,7 @@ export function AllNewsPage({
                       type="button"
                       role="tab"
                       aria-selected={isActive}
-                      onClick={() => setActiveCategory(category)}
+                      onClick={() => handleCategoryChange(category)}
                       className={`px-4 py-1.5 rounded-full text-xs md:text-sm font-normal transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                         isActive
                           ? 'bg-[#164234] text-[#F6F3EC]'
@@ -90,7 +139,7 @@ export function AllNewsPage({
                 <input
                   type="search"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Cari berita atau layanan..."
                   aria-label="Cari berita"
                   className="w-full bg-transparent text-sm text-[#164234] placeholder:text-[#3E544B]/50 focus:outline-none min-w-0"
@@ -99,7 +148,7 @@ export function AllNewsPage({
             </div>
           </motion.div>
 
-          {/* All News Cards Grid */}
+          {/* All News Cards Grid (Max 6 per page) */}
           {filteredArticles.length === 0 ? (
             <div className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/55 backdrop-blur-xl border border-[#C9A45A]/25 p-10 text-center flex flex-col items-center gap-3">
               <Newspaper className="w-8 h-8 text-[#B89242]" />
@@ -111,6 +160,7 @@ export function AllNewsPage({
                 onClick={() => {
                   setActiveCategory('Semua');
                   setSearchQuery('');
+                  setCurrentPage(1);
                 }}
                 className="px-5 py-2 rounded-full bg-[#164234] text-[#F6F3EC] text-sm cursor-pointer"
               >
@@ -118,37 +168,49 @@ export function AllNewsPage({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-              {filteredArticles.map((article, index) => (
-                <motion.article
-                  key={article.id}
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 0.55,
-                    delay: index * 0.05,
-                    ease: [0.16, 1, 0.3, 1],
-                  }}
-                  onClick={() => onSelectArticle(article.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onSelectArticle(article.id);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="button"
-                  className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/60 backdrop-blur-xl border border-[#C9A45A]/25 p-3.5 md:p-4 flex flex-col gap-4 group cursor-pointer hover:bg-white/80 hover:border-[#C9A45A]/50 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#164234]"
-                >
-                  {/* Image Container */}
-                  <div className="relative w-full aspect-[4/3] rounded-[1.15rem] md:rounded-[1.85rem] overflow-hidden bg-gradient-to-br from-[#F4EFE3] via-[#EAE5D7] to-[#D9E2DA] flex items-center justify-center">
-                    {failedImages[article.id] ? (
-                      <div className="flex flex-col items-center justify-center gap-2 text-[#164234]/50">
-                        <Newspaper className="w-7 h-7" />
-                        <span className="text-xs">{article.category}</span>
-                      </div>
-                    ) : article.isLogoPlaceholder ? (
-                      <div className="w-full h-full flex items-center justify-center p-8 md:p-10">
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+                {paginatedArticles.map((article, index) => (
+                  <motion.article
+                    key={article.id}
+                    initial={{ opacity: 0, y: 18 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.5,
+                      delay: index * 0.05,
+                      ease: [0.16, 1, 0.3, 1],
+                    }}
+                    onClick={() => onSelectArticle(article.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSelectArticle(article.id);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/60 backdrop-blur-xl border border-[#C9A45A]/25 p-3.5 md:p-4 flex flex-col gap-4 group cursor-pointer hover:bg-white/80 hover:border-[#C9A45A]/50 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#164234]"
+                  >
+                    {/* Image Container */}
+                    <div className="relative w-full aspect-[4/3] rounded-[1.15rem] md:rounded-[1.85rem] overflow-hidden bg-gradient-to-br from-[#F4EFE3] via-[#EAE5D7] to-[#D9E2DA] flex items-center justify-center">
+                      {failedImages[article.id] ? (
+                        <div className="flex flex-col items-center justify-center gap-2 text-[#164234]/50">
+                          <Newspaper className="w-7 h-7" />
+                          <span className="text-xs">{article.category}</span>
+                        </div>
+                      ) : article.isLogoPlaceholder ? (
+                        <div className="w-full h-full flex items-center justify-center p-8 md:p-10">
+                          <img
+                            src={article.image}
+                            alt={article.title}
+                            referrerPolicy="no-referrer"
+                            onError={() =>
+                              setFailedImages((prev) => ({ ...prev, [article.id]: true }))
+                            }
+                            className="max-h-24 sm:max-h-28 md:max-h-32 w-auto object-contain transition-transform duration-500 ease-out group-hover:scale-[1.05]"
+                          />
+                        </div>
+                      ) : (
                         <img
                           src={article.image}
                           alt={article.title}
@@ -156,50 +218,100 @@ export function AllNewsPage({
                           onError={() =>
                             setFailedImages((prev) => ({ ...prev, [article.id]: true }))
                           }
-                          className="max-h-24 sm:max-h-28 md:max-h-32 w-auto object-contain transition-transform duration-500 ease-out group-hover:scale-[1.05]"
+                          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
                         />
+                      )}
+                    </div>
+
+                    {/* Card Body */}
+                    <div className="px-2 pb-2 flex flex-col gap-2.5 flex-1 justify-between">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2 text-xs text-[#8F6D26] font-normal">
+                          <span>{article.category}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>{article.date}</span>
+                        </div>
+
+                        <h2 className="text-lg md:text-xl font-normal text-[#164234] tracking-tight leading-snug">
+                          {article.title}
+                        </h2>
+
+                        <p className="text-sm text-[#3E544B] leading-relaxed line-clamp-2 text-justify">
+                          {article.excerpt}
+                        </p>
                       </div>
-                    ) : (
-                      <img
-                        src={article.image}
-                        alt={article.title}
-                        referrerPolicy="no-referrer"
-                        onError={() =>
-                          setFailedImages((prev) => ({ ...prev, [article.id]: true }))
-                        }
-                        className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
-                      />
+
+                      <div className="pt-2 flex items-center gap-1 text-xs md:text-sm text-[#164234]/80 group-hover:text-[#164234] transition-colors">
+                        <span>Baca Selengkapnya</span>
+                        <ChevronRight className="w-4 h-4 text-[#B89242] transition-transform group-hover:translate-x-0.5" />
+                      </div>
+                    </div>
+                  </motion.article>
+                ))}
+              </div>
+
+              {/* Pagination Navigation (rendered when total articles exceed 6) */}
+              {totalPages > 1 && (
+                <nav
+                  aria-label="Navigasi halaman berita"
+                  className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 px-3 md:px-6"
+                >
+                  <span className="text-xs sm:text-sm text-[#3E544B] tabular-nums">
+                    Menampilkan {startIndex + 1}–
+                    {Math.min(startIndex + ITEMS_PER_PAGE, filteredArticles.length)}{' '}
+                    dari {filteredArticles.length} berita
+                  </span>
+
+                  <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-white/75 backdrop-blur-xl border border-[#C9A45A]/30">
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(safePage - 1)}
+                      disabled={safePage === 1}
+                      aria-label="Halaman sebelumnya"
+                      className="inline-flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-[#164234] hover:bg-[#F6F3EC] disabled:opacity-35 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    {pageNumbers.map((pageItem, idx) =>
+                      pageItem === 'ellipsis' ? (
+                        <span
+                          key={`ellipsis-${idx}`}
+                          className="w-8 text-center text-sm text-[#3E544B]/60 select-none"
+                        >
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={pageItem}
+                          type="button"
+                          onClick={() => handlePageChange(pageItem)}
+                          aria-label={`Halaman ${pageItem}`}
+                          aria-current={pageItem === safePage ? 'page' : undefined}
+                          className={`inline-flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-sm font-normal tabular-nums transition-colors cursor-pointer ${
+                            pageItem === safePage
+                              ? 'bg-[#164234] text-[#F6F3EC]'
+                              : 'text-[#164234] hover:bg-[#F6F3EC]'
+                          }`}
+                        >
+                          {pageItem}
+                        </button>
+                      )
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(safePage + 1)}
+                      disabled={safePage === totalPages}
+                      aria-label="Halaman berikutnya"
+                      className="inline-flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-[#164234] hover:bg-[#F6F3EC] disabled:opacity-35 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
                   </div>
-
-                  {/* Card Body */}
-                  <div className="px-2 pb-2 flex flex-col gap-2.5 flex-1 justify-between">
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2 text-xs text-[#8F6D26] font-normal">
-                        <span>{article.category}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>{article.date}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>{article.readTime}</span>
-                      </div>
-
-                      <h2 className="text-lg md:text-xl font-normal text-[#164234] tracking-tight leading-snug">
-                        {article.title}
-                      </h2>
-
-                      <p className="text-sm text-[#3E544B] leading-relaxed line-clamp-2">
-                        {article.excerpt}
-                      </p>
-                    </div>
-
-                    <div className="pt-2 flex items-center gap-1 text-xs md:text-sm text-[#164234]/80 group-hover:text-[#164234] transition-colors">
-                      <span>Baca Selengkapnya</span>
-                      <ChevronRight className="w-4 h-4 text-[#B89242] transition-transform group-hover:translate-x-0.5" />
-                    </div>
-                  </div>
-                </motion.article>
-              ))}
-            </div>
+                </nav>
+              )}
+            </>
           )}
         </div>
       </section>
@@ -213,7 +325,6 @@ export function AllNewsPage({
           onNavigateSection(target);
         }}
       />
-
     </div>
   );
 }

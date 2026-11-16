@@ -4,7 +4,6 @@ import {
   Calendar,
   Check,
   ChevronRight,
-  Clock,
   MessageSquare,
   Send,
   Tag,
@@ -111,7 +110,7 @@ export function NewsDetailPage({
   return (
     <div className="min-h-screen bg-[#F6F3EC] flex flex-col">
       <PageHero
-        eyebrow={`${article.category} · ${article.date} · ${article.readTime}`}
+        eyebrow={`${article.category} · ${article.date}`}
         title={article.title}
         subtitle={article.excerpt}
         imageSrc={article.isLogoPlaceholder ? undefined : article.image}
@@ -151,10 +150,6 @@ export function NewsDetailPage({
                   <Calendar className="w-3.5 h-3.5 text-[#B89242]" />
                   <span>{article.date}</span>
                 </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-[#B89242]" />
-                  <span>{article.readTime}</span>
-                </span>
               </div>
             </div>
 
@@ -176,7 +171,7 @@ export function NewsDetailPage({
             )}
 
             {/* Editorial Text */}
-            <div className="w-full max-w-3xl mx-auto flex flex-col gap-5 text-base sm:text-[17px] md:text-lg text-[#3E544B] leading-relaxed">
+            <div className="w-full max-w-3xl mx-auto flex flex-col gap-5 text-base sm:text-[17px] md:text-lg text-[#3E544B] leading-relaxed text-justify">
               {article.content.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
@@ -379,7 +374,7 @@ export function NewsDetailPage({
                     <h3 className="text-lg font-normal text-[#164234] tracking-tight leading-snug">
                       {item.title}
                     </h3>
-                    <p className="text-sm text-[#3E544B] leading-relaxed line-clamp-2">
+                    <p className="text-sm text-[#3E544B] leading-relaxed line-clamp-2 text-justify">
                       {item.excerpt}
                     </p>
                   </div>
