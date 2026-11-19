@@ -1,15 +1,28 @@
-import { ChevronRight } from 'lucide-react';
+import { Icon } from '@iconify/react';
 import { motion } from 'motion/react';
 
 interface BottomRightCornerProps {
+  label?: string;
+  actionLabel?: string;
+  href?: string;
   onOpenProfile?: () => void;
 }
 
-export function BottomRightCorner({ onOpenProfile }: BottomRightCornerProps) {
+export function BottomRightCorner({
+  label = 'Profil P2B',
+  actionLabel = 'Tentang Kami',
+  href = '/tentang-kami',
+  onOpenProfile,
+}: BottomRightCornerProps) {
+  const isExternal = /^https?:\/\//i.test(href);
+
   return (
     <motion.a
-      href="#tentang-kami"
+      href={href}
+      target={isExternal ? '_blank' : undefined}
+      rel={isExternal ? 'noopener noreferrer' : undefined}
       onClick={(e) => {
+        if (isExternal) return;
         e.preventDefault();
         onOpenProfile?.();
       }}
@@ -47,11 +60,11 @@ export function BottomRightCorner({ onOpenProfile }: BottomRightCornerProps) {
 
       <div className="flex flex-col">
         <span className="text-[16px] md:text-[20px] font-normal text-[#164234]">
-          Profil P2B
+          {label}
         </span>
         <div className="flex items-center gap-1 text-[#8F6D26] group-hover:text-[#164234] transition-colors">
-          <span className="text-[12px] md:text-[15px] font-normal">Tentang Kami</span>
-          <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+          <span className="text-[12px] md:text-[15px] font-normal">{actionLabel}</span>
+          <Icon icon="mdi:chevron-right" className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
         </div>
       </div>
     </motion.a>

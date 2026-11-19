@@ -1,14 +1,32 @@
-export type NewsCategory = 'Semua' | 'Fasilitas' | 'Layanan' | 'Produk';
+export type NewsCategory = string;
+
+export const DEFAULT_NEWS_CATEGORIES: string[] = ['Fasilitas', 'Layanan', 'Produk'];
+
+export interface NewsGalleryItem {
+  url: string;
+  caption?: string;
+}
+
+export interface NewsAttachment {
+  id: string;
+  title: string;
+  url: string;
+  fileName?: string;
+  sizeBytes?: number;
+}
 
 export interface NewsArticle {
   id: string;
-  category: Exclude<NewsCategory, 'Semua'>;
+  category: string;
   date: string;
   title: string;
   excerpt: string;
   image: string;
   isLogoPlaceholder?: boolean;
   content: string[];
+  contentHtml?: string;
+  gallery?: NewsGalleryItem[];
+  attachments?: NewsAttachment[];
 }
 
 export const NEWS_PLACEHOLDER_LOGO =
@@ -35,13 +53,13 @@ export const allNewsArticles: NewsArticle[] = [
     id: 'klinik-uin-saga',
     category: 'Layanan',
     date: '09 Nov 2026',
-    title: 'Klinik UIN SAGA Perluas Jam Layanan Konsultasi & Pemeriksaan Preventif',
+    title: 'Klinik Mitra Insani Perluas Jam Layanan Konsultasi & Pemeriksaan Preventif',
     excerpt:
       'Penambahan jadwal praktik dokter umum dan layanan skrining kesehatan berkala hadir untuk meningkatkan akses kesehatan civitas serta warga sekitar.',
     image: NEWS_PLACEHOLDER_LOGO,
     isLogoPlaceholder: true,
     content: [
-      'Klinik UIN SAGA membuka perluasan jam operasional layanan rawat jalan dan pemeriksaan preventif guna menjawab meningkatnya kebutuhan konsultasi kesehatan harian.',
+      'Klinik Mitra Insani membuka perluasan jam operasional layanan rawat jalan dan pemeriksaan preventif guna menjawab meningkatnya kebutuhan konsultasi kesehatan harian.',
       'Area tunggu dan ruang konsultasi dirancang ulang dengan partisi kaca higienis dan alur pendaftaran digital agar pasien memperoleh pengalaman layanan yang tenang dan efisien.',
       'Civitas akademika maupun masyarakat umum dapat memanfaatkan layanan pemeriksaan dasar, konsultasi gizi, serta rujukan terstruktur setiap hari kerja.',
     ],
@@ -147,7 +165,7 @@ export const allNewsArticles: NewsArticle[] = [
     image: NEWS_PLACEHOLDER_LOGO,
     isLogoPlaceholder: true,
     content: [
-      'Unit layanan komersial P2B UIN Salatiga mengintegrasikan strategi komunikasi digital dalam memperkenalkan produk Air Mineral, layanan reservasi Gedung Auditorium, serta fasilitas Klinik UIN SAGA kepada publik.',
+      'Unit layanan komersial P2B UIN Salatiga mengintegrasikan strategi komunikasi digital dalam memperkenalkan produk Air Mineral, layanan reservasi Gedung Auditorium, serta fasilitas Klinik Mitra Insani kepada publik.',
       'Kegiatan ini menjadi ruang pembelajaran praktik langsung bagi mahasiswa magang pada bidang pemasaran digital, teknologi informasi, komunikasi publik, bisnis, dan akuntansi.',
       'Pendekatan ini memperkuat budaya inovasi serta mempercepat transformasi layanan P2B yang responsif terhadap kebutuhan pengguna.',
     ],

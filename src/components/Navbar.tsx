@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUpRight, Check, ChevronRight, Menu, X } from 'lucide-react';
+import { Icon } from '@iconify/react';
 import { motion, AnimatePresence } from 'motion/react';
+import { defaultNavItems } from '../data/defaultNav';
+import { CmsNavItem, SiteSettings } from '../types/cms';
 
 export type NavPageTarget =
   | 'home'
@@ -8,58 +10,35 @@ export type NavPageTarget =
   | 'visi-misi'
   | 'struktur-organisasi'
   | 'all-news'
-  | 'news-detail';
+  | 'news-detail'
+  | 'not-found';
 
-interface NavDropdownItem {
-  title: string;
-  subtitle: string;
-  page?: NavPageTarget;
-}
-
-interface NavItem {
-  label: string;
-  hasDropdown?: boolean;
-  dropdownItems?: NavDropdownItem[];
-}
-
-const navItems: NavItem[] = [
-  { label: 'Beranda' },
-  {
-    label: 'Profil',
-    hasDropdown: true,
-    dropdownItems: [
-      { title: 'Tentang', subtitle: 'Mengenal unit usaha & layanan kami', page: 'about' },
-      { title: 'Visi Misi', subtitle: 'Arah strategis dan komitmen layanan', page: 'visi-misi' },
-      {
-        title: 'Struktur Organisasi',
-        subtitle: 'Susunan pengurus dan manajemen unit',
-        page: 'struktur-organisasi',
-      },
-    ],
-  },
-  {
-    label: 'Layanan',
-    hasDropdown: true,
-    dropdownItems: [
-      { title: 'Air Mineral', subtitle: 'Produksi dan distribusi air minum' },
-      { title: 'Gedung Auditorium', subtitle: 'Sewa ruang acara dan konferensi' },
-      { title: 'Pelayanan Sewa Aset', subtitle: 'Pengelolaan dan penyewaan fasilitas' },
-      { title: 'Klinik UIN SAGA', subtitle: 'Layanan kesehatan civitas dan umum' },
-      { title: 'Kantin', subtitle: 'Area kuliner higienis dan terjangkau' },
-      { title: 'Tiket', subtitle: 'Pemesanan tiket acara dan layanan' },
-    ],
-  },
-];
-
-const LOGO_URL = 'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/Logo.webp';
+const DEFAULT_LOGO_URL =
+  'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/Logo.webp';
 
 interface NavbarProps {
   currentPage: NavPageTarget;
+  currentPath: string;
+  navItems?: CmsNavItem[];
+  settings?: SiteSettings;
   onNavigatePage: (page: NavPageTarget) => void;
+  onNavigateTarget: (target: string) => void;
 }
 
-export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+function normalizeTargetPath(raw: string): string {
+  const cleaned = raw.trim().replace(/\/+$/, '');
+  return cleaned || '/';
+}
+
+export function Navbar({
+  currentPage,
+  currentPath,
+  navItems = defaultNavItems,
+  settings,
+  onNavigatePage,
+  onNavigateTarget,
+}: NavbarProps) {
+  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -67,16 +46,36 @@ export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
   const lastScrollYRef = useRef(0);
 
   const [activeModal, setActiveModal] = useState<'contact' | 'service' | null>(null);
-  const [selectedService, setSelectedService] = useState('');
+  const [selectedServiceTitle, setSelectedServiceTitle] = useState('');
+  const [selectedServiceDescription, setSelectedServiceDescription] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactMessage, setContactMessage] = useState('');
   const [contactSubmitted, setContactSubmitted] = useState(false);
+  const [contactSubmitting, setContactSubmitting] = useState(false);
+  const [contactError, setContactError] = useState('');
+
+  const resolvedLogoUrl = settings?.header_logo_url?.trim() || DEFAULT_LOGO_URL;
+  const resolvedBrandText = settings?.header_brand_text?.trim() || 'P2B UIN Salatiga';
+  const resolvedLogoTarget = settings?.header_logo_target?.trim() || '/';
+  const resolvedCtaLabel = settings?.header_cta_label?.trim() || 'Kontak';
+  const resolvedCtaAction = settings?.header_cta_action?.trim() || 'modal_contact';
+  const resolvedCtaTarget = settings?.header_cta_target?.trim() || '';
+  const resolvedPhone = settings?.contact_phone?.trim() || '0811-2520-4371';
+  const resolvedPhoneHref = `tel:${resolvedPhone.replace(/[^0-9+]/g, '').replace(/^0/, '+62')}`;
+  const resolvedEmail = settings?.contact_email?.trim() || 'p2b@uinsalatiga.ac.id';
+  const resolvedAddress =
+    settings?.location_address?.trim() ||
+    'P2B UIN Salatiga, Gedung Auditorium & Student Center Prof. Dr. H. Achmadi, Jl. Lingkar Selatan Km. 02, Pulutan, Sidorejo, Kota Salatiga, Jawa Tengah 50716.';
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [resolvedLogoUrl]);
 
   useEffect(() => {
     setHeaderVisible(true);
     setScrolled(window.scrollY > 24);
     lastScrollYRef.current = Math.max(window.scrollY, 0);
-  }, [currentPage]);
+  }, [currentPage, currentPath]);
 
   useEffect(() => {
     const onScroll = () => {
@@ -89,7 +88,7 @@ export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
         setHeaderVisible(true);
       } else if (delta > 8 && currentY > 120) {
         setHeaderVisible(false);
-        setOpenDropdown(null);
+        setOpenDropdownId(null);
         setMobileMenuOpen(false);
       } else if (delta < -4) {
         setHeaderVisible(true);
@@ -103,44 +102,140 @@ export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const isProfileActive =
-    currentPage === 'about' ||
-    currentPage === 'visi-misi' ||
-    currentPage === 'struktur-organisasi';
+  const sourceNav = navItems.length > 0 ? navItems : defaultNavItems;
+  const activeNav = sourceNav.filter((item) => item.isActive !== false);
+  const topLevelItems = activeNav
+    .filter((item) => item.parentId === null)
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+
+  const getChildrenFor = (parentId: number) =>
+    activeNav
+      .filter((item) => item.parentId === parentId)
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+
+  const isTargetCurrent = (item: CmsNavItem): boolean => {
+    if (item.actionType !== 'page' && item.actionType !== 'url') return false;
+    if (!item.target.trim().startsWith('/')) return false;
+    return normalizeTargetPath(item.target) === normalizeTargetPath(currentPath);
+  };
 
   const handleOpenContact = () => {
     setContactSubmitted(false);
+    setContactError('');
     setContactEmail('');
     setContactMessage('');
     setActiveModal('contact');
   };
 
-  const handleSelectDropdownItem = (itemLabel: string, sub: NavDropdownItem) => {
-    setOpenDropdown(null);
+  const executeNavAction = (item: CmsNavItem) => {
+    setOpenDropdownId(null);
     setMobileMenuOpen(false);
-    if (sub.page) {
-      onNavigatePage(sub.page);
+
+    if (item.actionType === 'modal_contact') {
+      handleOpenContact();
       return;
     }
-    setSelectedService(`${itemLabel} · ${sub.title}`);
-    setActiveModal('service');
+
+    if (item.actionType === 'modal_service') {
+      setSelectedServiceTitle(item.label);
+      setSelectedServiceDescription(
+        item.description?.trim() ||
+          `Layanan ${item.label} dikelola oleh Pusat Pengembangan Bisnis (P2B) UIN Salatiga dengan standar tata kelola PTN BLU yang transparan, profesional, dan berorientasi pada kepuasan pengguna.`
+      );
+      setActiveModal('service');
+      return;
+    }
+
+    const rawTarget = item.target.trim();
+    if (!rawTarget) {
+      onNavigatePage('home');
+      return;
+    }
+
+    onNavigateTarget(rawTarget);
   };
 
-  const handleDirectBeranda = () => {
-    setOpenDropdown(null);
+  const handleDirectLogo = () => {
+    setOpenDropdownId(null);
     setMobileMenuOpen(false);
-    if (currentPage === 'home') {
+    const target = resolvedLogoTarget || '/';
+    if (target === '/' && currentPage === 'home') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      onNavigatePage('home');
+      return;
+    }
+    onNavigateTarget(target);
+  };
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedEmail = contactEmail.trim();
+    if (!trimmedEmail) return;
+
+    setContactSubmitting(true);
+    setContactError('');
+    try {
+      const res = await fetch('/api/public/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          message: contactMessage.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        setContactError(data.message || 'Gagal mengirim pesan. Silakan coba kembali.');
+        return;
+      }
+      setContactSubmitted(true);
+    } catch {
+      setContactError('Tidak dapat terhubung ke server. Silakan coba lagi.');
+    } finally {
+      setContactSubmitting(false);
     }
   };
 
-  const handleContactSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!contactEmail.trim()) return;
-    setContactSubmitted(true);
+  const renderExternalLinkOrButton = (
+    item: CmsNavItem,
+    className: string,
+    children: React.ReactNode
+  ) => {
+    const isExternalNewTab =
+      item.openNewTab && /^(https?:\/\/|mailto:|tel:)/i.test(item.target.trim());
+
+    if (isExternalNewTab) {
+      return (
+        <a
+          href={item.target.trim()}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => {
+            setOpenDropdownId(null);
+            setMobileMenuOpen(false);
+          }}
+          className={className}
+        >
+          {children}
+        </a>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => executeNavAction(item)}
+        className={className}
+      >
+        {children}
+      </button>
+    );
   };
+
+  const ctaIsExternal =
+    resolvedCtaAction === 'url' &&
+    /^(https?:\/\/|mailto:|tel:)/i.test(resolvedCtaTarget);
 
   return (
     <>
@@ -158,71 +253,85 @@ export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
               : 'rounded-[1.5rem] md:rounded-[3rem] px-5 md:px-10 py-5 md:py-6 bg-transparent border border-transparent shadow-none'
           }`}
         >
-          {/* Desktop Left: Unboxed Logo with high contrast on dark emerald glass */}
+          {/* Desktop Left: Unboxed Logo */}
           <div className="flex-1 hidden md:flex items-center">
             <button
               type="button"
-              onClick={handleDirectBeranda}
-              aria-label="Beranda P2B UIN Salatiga"
+              onClick={handleDirectLogo}
+              aria-label={resolvedBrandText}
               className="inline-flex items-center bg-transparent border-0 p-0 cursor-pointer shrink-0 hover:opacity-90 transition-opacity"
             >
-              {!logoFailed ? (
+              {!logoFailed && resolvedLogoUrl ? (
                 <img
-                  src={LOGO_URL}
-                  alt="Logo Pusat Pengembangan Bisnis UIN Salatiga"
+                  src={resolvedLogoUrl}
+                  alt={resolvedBrandText}
                   referrerPolicy="no-referrer"
                   onError={() => setLogoFailed(true)}
                   className="h-9 lg:h-10 w-auto object-contain"
                 />
               ) : (
                 <span className="text-base font-normal tracking-tight text-[#FAF8F3] whitespace-nowrap">
-                  P2B UIN Salatiga
+                  {resolvedBrandText}
                 </span>
               )}
             </button>
           </div>
 
-          {/* Desktop Center Navigation */}
+          {/* Desktop Center Dynamic Navigation */}
           <ul className="hidden md:flex items-center gap-8 text-[#FAF8F3] font-normal text-sm">
-            {navItems.map((item) => {
+            {topLevelItems.map((item) => {
+              const children = getChildrenFor(item.id);
+              const hasDropdown =
+                item.actionType === 'dropdown' || children.length > 0;
               const isActive =
-                (item.label === 'Beranda' && currentPage === 'home') ||
-                (item.label === 'Profil' && isProfileActive);
+                isTargetCurrent(item) ||
+                children.some((child) => isTargetCurrent(child));
 
               return (
                 <li
-                  key={item.label}
+                  key={item.id}
                   className="relative"
-                  onMouseEnter={() => item.hasDropdown && setOpenDropdown(item.label)}
-                  onMouseLeave={() => item.hasDropdown && setOpenDropdown(null)}
+                  onMouseEnter={() => hasDropdown && setOpenDropdownId(item.id)}
+                  onMouseLeave={() => hasDropdown && setOpenDropdownId(null)}
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (item.hasDropdown) {
-                        setOpenDropdown((prev) => (prev === item.label ? null : item.label));
-                      } else {
-                        handleDirectBeranda();
-                      }
-                    }}
-                    className={`cursor-pointer hover:text-[#F4D993] transition-colors flex items-center gap-1 group whitespace-nowrap shrink-0 bg-transparent border-0 p-0 font-normal ${
-                      isActive ? 'text-[#F4D993]' : 'text-[#FAF8F3]'
-                    }`}
-                  >
-                    <span>{item.label}</span>
-                    {item.hasDropdown && (
-                      <ChevronRight
+                  {hasDropdown ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (item.target.trim() && item.actionType !== 'dropdown') {
+                          executeNavAction(item);
+                        } else {
+                          setOpenDropdownId((prev) =>
+                            prev === item.id ? null : item.id
+                          );
+                        }
+                      }}
+                      className={`cursor-pointer hover:text-[#F4D993] transition-colors flex items-center gap-1 group whitespace-nowrap shrink-0 bg-transparent border-0 p-0 font-normal ${
+                        isActive ? 'text-[#F4D993]' : 'text-[#FAF8F3]'
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      <Icon
+                        icon="mdi:chevron-right"
                         className={`w-4 h-4 text-[#F4D993] transition-transform ${
-                          openDropdown === item.label
+                          openDropdownId === item.id
                             ? 'rotate-90'
                             : 'group-hover:translate-x-0.5'
                         }`}
                       />
-                    )}
-                  </button>
+                    </button>
+                  ) : (
+                    renderExternalLinkOrButton(
+                      item,
+                      `cursor-pointer hover:text-[#F4D993] transition-colors flex items-center gap-1 group whitespace-nowrap shrink-0 bg-transparent border-0 p-0 font-normal ${
+                        isActive ? 'text-[#F4D993]' : 'text-[#FAF8F3]'
+                      }`,
+                      <span>{item.label}</span>
+                    )
+                  )}
 
                   <AnimatePresence>
-                    {item.hasDropdown && openDropdown === item.label && item.dropdownItems && (
+                    {hasDropdown && openDropdownId === item.id && children.length > 0 && (
                       <motion.div
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -231,27 +340,32 @@ export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
                         className="absolute left-0 top-full pt-3 z-30"
                       >
                         <div className="w-72 rounded-2xl bg-white/92 backdrop-blur-xl border border-[#C9A45A]/30 p-2 shadow-lg flex flex-col gap-1">
-                          {item.dropdownItems.map((sub) => {
-                            const subActive = sub.page && currentPage === sub.page;
+                          {children.map((sub) => {
+                            const subActive = isTargetCurrent(sub);
                             return (
-                              <button
-                                key={sub.title}
-                                type="button"
-                                onClick={() => handleSelectDropdownItem(item.label, sub)}
-                                className={`text-left px-3 py-2 rounded-xl transition-colors cursor-pointer ${
-                                  subActive ? 'bg-[#F6F3EC]' : 'hover:bg-[#F6F3EC]'
-                                }`}
-                              >
-                                <div className="text-xs font-normal text-[#164234] flex items-center justify-between">
-                                  <span>{sub.title}</span>
-                                  {subActive && (
-                                    <span className="text-[10px] text-[#8F6D26]">Aktif</span>
-                                  )}
-                                </div>
-                                <div className="text-[11px] font-normal text-[#3E544B]/75 mt-0.5">
-                                  {sub.subtitle}
-                                </div>
-                              </button>
+                              <div key={sub.id}>
+                                {renderExternalLinkOrButton(
+                                  sub,
+                                  `w-full block text-left px-3 py-2 rounded-xl transition-colors cursor-pointer ${
+                                    subActive ? 'bg-[#F6F3EC]' : 'hover:bg-[#F6F3EC]'
+                                  }`,
+                                  <>
+                                    <div className="text-xs font-normal text-[#164234] flex items-center justify-between">
+                                      <span>{sub.label}</span>
+                                      {subActive && (
+                                        <span className="text-[10px] text-[#8F6D26]">
+                                          Aktif
+                                        </span>
+                                      )}
+                                    </div>
+                                    {sub.subtitle && (
+                                      <div className="text-[11px] font-normal text-[#3E544B]/75 mt-0.5">
+                                        {sub.subtitle}
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
                             );
                           })}
                         </div>
@@ -271,44 +385,70 @@ export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
               aria-label="Toggle navigation menu"
               className="w-9 h-9 rounded-full bg-white/15 backdrop-blur-md border border-[#F4D993]/40 flex items-center justify-center text-[#FAF8F3] cursor-pointer shrink-0"
             >
-              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              {mobileMenuOpen ? (
+                <Icon icon="mdi:close" className="w-4 h-4" />
+              ) : (
+                <Icon icon="mdi:menu" className="w-4 h-4" />
+              )}
             </button>
             <button
               type="button"
-              onClick={handleDirectBeranda}
-              aria-label="Beranda P2B UIN Salatiga"
+              onClick={handleDirectLogo}
+              aria-label={resolvedBrandText}
               className="inline-flex items-center bg-transparent border-0 p-0 cursor-pointer shrink-0"
             >
-              {!logoFailed ? (
+              {!logoFailed && resolvedLogoUrl ? (
                 <img
-                  src={LOGO_URL}
-                  alt="Logo P2B UIN Salatiga"
+                  src={resolvedLogoUrl}
+                  alt={resolvedBrandText}
                   referrerPolicy="no-referrer"
                   onError={() => setLogoFailed(true)}
                   className="h-7 w-auto object-contain"
                 />
               ) : (
                 <span className="font-normal tracking-tight text-base text-[#FAF8F3] whitespace-nowrap">
-                  P2B UIN Salatiga
+                  {resolvedBrandText}
                 </span>
               )}
             </button>
           </div>
 
-          {/* Right: Kontak Pill (with circular arrow kept as requested) */}
+          {/* Right: Dynamic CTA Pill */}
           <div className="flex-1 flex justify-end">
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleOpenContact}
-              className="flex items-center bg-[#FAF8F3]/95 text-[#164234] rounded-full pl-2 pr-4 md:pr-6 py-1.5 md:py-2 gap-2 md:gap-3 border border-[#F4D993]/60 hover:bg-white transition-colors group cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
-            >
-              <div className="bg-[#164234] p-1 md:p-1.5 rounded-full flex items-center justify-center">
-                <ArrowUpRight className="w-4 h-4 md:w-5 md:h-5 text-[#F4D993]" />
-              </div>
-              <span className="text-xs md:text-sm font-normal">Kontak</span>
-            </motion.button>
+            {ctaIsExternal ? (
+              <motion.a
+                href={resolvedCtaTarget}
+                target="_blank"
+                rel="noopener noreferrer"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="flex items-center bg-[#FAF8F3]/95 text-[#164234] rounded-full pl-2 pr-4 md:pr-6 py-1.5 md:py-2 gap-2 md:gap-3 border border-[#F4D993]/60 hover:bg-white transition-colors group cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
+              >
+                <div className="bg-[#164234] p-1 md:p-1.5 rounded-full flex items-center justify-center">
+                  <Icon icon="mdi:arrow-top-right" className="w-4 h-4 md:w-5 md:h-5 text-[#F4D993]" />
+                </div>
+                <span className="text-xs md:text-sm font-normal">{resolvedCtaLabel}</span>
+              </motion.a>
+            ) : (
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  if (resolvedCtaAction === 'url' && resolvedCtaTarget) {
+                    onNavigateTarget(resolvedCtaTarget);
+                  } else {
+                    handleOpenContact();
+                  }
+                }}
+                className="flex items-center bg-[#FAF8F3]/95 text-[#164234] rounded-full pl-2 pr-4 md:pr-6 py-1.5 md:py-2 gap-2 md:gap-3 border border-[#F4D993]/60 hover:bg-white transition-colors group cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
+              >
+                <div className="bg-[#164234] p-1 md:p-1.5 rounded-full flex items-center justify-center">
+                  <Icon icon="mdi:arrow-top-right" className="w-4 h-4 md:w-5 md:h-5 text-[#F4D993]" />
+                </div>
+                <span className="text-xs md:text-sm font-normal">{resolvedCtaLabel}</span>
+              </motion.button>
+            )}
           </div>
 
           {/* Mobile Dropdown Navigation */}
@@ -321,37 +461,39 @@ export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
                 transition={{ duration: 0.2 }}
                 className="md:hidden absolute top-full left-0 right-0 mt-2 rounded-2xl bg-white/95 backdrop-blur-xl border border-[#C9A45A]/30 p-4 shadow-lg z-30 flex flex-col gap-3"
               >
-                {navItems.map((item) => (
-                  <div key={item.label} className="flex flex-col gap-1.5">
-                    {item.hasDropdown && item.dropdownItems ? (
-                      <>
-                        <span className="text-xs uppercase tracking-wider text-[#8F6D26] px-2">
-                          {item.label}
-                        </span>
-                        <div className="flex flex-col gap-1 pl-2">
-                          {item.dropdownItems.map((sub) => (
-                            <button
-                              key={sub.title}
-                              type="button"
-                              onClick={() => handleSelectDropdownItem(item.label, sub)}
-                              className="text-left text-sm text-[#164234] py-1.5 px-2 rounded-lg hover:bg-[#F6F3EC] transition-colors cursor-pointer"
-                            >
-                              {sub.title}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleDirectBeranda}
-                        className="text-left text-sm text-[#164234] py-1.5 px-2 rounded-lg hover:bg-[#F6F3EC] transition-colors cursor-pointer"
-                      >
-                        {item.label}
-                      </button>
-                    )}
-                  </div>
-                ))}
+                {topLevelItems.map((item) => {
+                  const children = getChildrenFor(item.id);
+                  const hasDropdown =
+                    item.actionType === 'dropdown' || children.length > 0;
+                  return (
+                    <div key={item.id} className="flex flex-col gap-1.5">
+                      {hasDropdown && children.length > 0 ? (
+                        <>
+                          <span className="text-xs uppercase tracking-wider text-[#8F6D26] px-2">
+                            {item.label}
+                          </span>
+                          <div className="flex flex-col gap-1 pl-2">
+                            {children.map((sub) => (
+                              <div key={sub.id}>
+                                {renderExternalLinkOrButton(
+                                  sub,
+                                  'w-full block text-left text-sm text-[#164234] py-1.5 px-2 rounded-lg hover:bg-[#F6F3EC] transition-colors cursor-pointer',
+                                  <span>{sub.label}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        renderExternalLinkOrButton(
+                          item,
+                          'w-full block text-left text-sm text-[#164234] py-1.5 px-2 rounded-lg hover:bg-[#F6F3EC] transition-colors cursor-pointer',
+                          <span>{item.label}</span>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
               </motion.div>
             )}
           </AnimatePresence>
@@ -382,25 +524,49 @@ export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
                 aria-label="Tutup modal"
                 className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[rgba(22,66,52,0.15)] flex items-center justify-center transition-colors cursor-pointer"
               >
-                <X className="w-4 h-4 text-[#164234]" />
+                <Icon icon="mdi:close" className="w-4 h-4 text-[#164234]" />
               </button>
 
               {activeModal === 'contact' && (
                 <div>
                   <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
-                    P2B UIN Salatiga
+                    {resolvedBrandText}
                   </span>
                   <h2 className="text-2xl font-normal tracking-tight mt-1 mb-2">
                     Hubungi Kami
                   </h2>
-                  <p className="text-sm text-[#3E544B] mb-6">
-                    Kirimkan pertanyaan terkait layanan sewa aset, Gedung Auditorium, Klinik UIN SAGA, kemitraan, maupun program magang mahasiswa.
+                  <p className="text-sm text-[#3E544B] mb-4">
+                    Kirimkan pertanyaan terkait layanan sewa aset, Gedung Auditorium, Klinik Mitra Insani, kemitraan, maupun program magang mahasiswa.
                   </p>
+
+                  {/* Official Institutional Contact Details */}
+                  <div className="mb-5 rounded-2xl bg-white/80 border border-[#C9A45A]/25 p-4 flex flex-col gap-2.5 text-xs sm:text-sm text-[#164234]">
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                      <a
+                        href={resolvedPhoneHref}
+                        className="inline-flex items-center gap-2 hover:text-[#8F6D26] transition-colors"
+                      >
+                        <Icon icon="mdi:phone-outline" className="w-4 h-4 text-[#8F6D26] shrink-0" />
+                        <span>{resolvedPhone}</span>
+                      </a>
+                      <a
+                        href={`mailto:${resolvedEmail}`}
+                        className="inline-flex items-center gap-2 hover:text-[#8F6D26] transition-colors"
+                      >
+                        <Icon icon="mdi:email-outline" className="w-4 h-4 text-[#8F6D26] shrink-0" />
+                        <span>{resolvedEmail}</span>
+                      </a>
+                    </div>
+                    <div className="flex items-start gap-2 text-xs text-[#3E544B] leading-relaxed pt-2 border-t border-[#C9A45A]/20">
+                      <Icon icon="mdi:map-marker-outline" className="w-4 h-4 text-[#8F6D26] shrink-0 mt-0.5" />
+                      <span>{resolvedAddress}</span>
+                    </div>
+                  </div>
 
                   {contactSubmitted ? (
                     <div className="flex items-center gap-3 p-4 rounded-2xl bg-[rgba(22,66,52,0.06)] border border-[#C9A45A]/25 text-sm">
                       <div className="w-8 h-8 rounded-full bg-[#164234] text-[#F4D993] flex items-center justify-center shrink-0">
-                        <Check className="w-4 h-4" />
+                        <Icon icon="mdi:check" className="w-4 h-4" />
                       </div>
                       <span>
                         Pesan dari <strong>{contactEmail}</strong> telah diterima. Tim P2B UIN Salatiga akan segera menghubungi Anda.
@@ -423,11 +589,15 @@ export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
                         placeholder="Tulis kebutuhan layanan atau proposal kemitraan Anda..."
                         className="w-full px-4 py-3 rounded-2xl bg-white/85 border border-[#C9A45A]/30 text-sm text-[#164234] placeholder:text-[#3E544B]/50 focus:outline-none focus:border-[#164234] resize-none"
                       />
+                      {contactError && (
+                        <p className="text-xs text-[#9b2c2c]">{contactError}</p>
+                      )}
                       <button
                         type="submit"
-                        className="w-full py-3 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors cursor-pointer"
+                        disabled={contactSubmitting}
+                        className="w-full py-3 rounded-full bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors cursor-pointer"
                       >
-                        Kirim Pesan
+                        {contactSubmitting ? 'Mengirim...' : 'Kirim Pesan'}
                       </button>
                     </form>
                   )}
@@ -437,13 +607,13 @@ export function Navbar({ currentPage, onNavigatePage }: NavbarProps) {
               {activeModal === 'service' && (
                 <div>
                   <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
-                    Layanan P2B UIN Salatiga
+                    Layanan {resolvedBrandText}
                   </span>
                   <h2 className="text-2xl font-normal tracking-tight mt-1 mb-2">
-                    {selectedService.replace('Layanan · ', '')}
+                    {selectedServiceTitle}
                   </h2>
                   <p className="text-sm text-[#3E544B] leading-relaxed mb-6">
-                    Layanan {selectedService.replace('Layanan · ', '')} dikelola oleh Pusat Pengembangan Bisnis (P2B) UIN Salatiga dengan standar tata kelola PTN BLU yang transparan, profesional, dan berorientasi pada kepuasan pengguna.
+                    {selectedServiceDescription}
                   </p>
 
                   <div className="flex items-center justify-end gap-3">

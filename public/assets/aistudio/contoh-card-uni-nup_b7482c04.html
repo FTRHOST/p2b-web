@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contoh Kartu "3-up" — gaya blog.google</title>
+<style>
+  /* ============================================================
+     1. DESIGN TOKEN
+     ============================================================ */
+  :root {
+    --surface-main: #ffffff;
+    --surface-card: #f8f9fa;
+    --surface-card-hover: #f1f3f4;
+
+    --text-primary: #202124;
+    --text-secondary: #5f6368;
+    --title-hover: #5f6368;
+    --border-strong: #202124;
+
+    --cta-hover-bg: rgb(32 33 36 / 0.04);
+    --outline: #1967d2;
+
+    --radius-card: 24px;
+    --radius-image: 24px;
+    --radius-pill: 48px;
+    --radius-pill-hover: 12px;
+
+    --space-1: 8px;
+    --space-1-5: 12px;
+    --space-2: 16px;
+    --space-3: 24px;
+
+    --font-sans: "Google Sans Flex", "Google Sans", Roboto, Arial, Helvetica, sans-serif;
+
+    --ease-standard: cubic-bezier(0.31, 0.94, 0.34, 1);
+    --ease-expressive: cubic-bezier(0.27, 1.06, 0.18, 1);
+  }
+
+  /* ============================================================
+     2. DASAR HALAMAN
+     ============================================================ */
+  *,
+  *::before,
+  *::after { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--surface-main);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  img { display: block; max-width: 100%; }
+
+  .page {
+    max-width: 1440px;
+    margin-inline: auto;
+    padding-inline: 16px;
+  }
+
+  @media (min-width: 481px)  { .page { padding-inline: 48px; } }
+  @media (min-width: 1025px) { .page { padding-inline: 72px; } }
+
+  /* ============================================================
+     3. SECTION HEADER
+     ============================================================ */
+  .nup {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin-block: 60px;
+  }
+
+  @media (min-width: 1025px) {
+    .nup { margin-block: 80px; }
+  }
+
+  .nup__header {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    row-gap: 16px;
+    width: 100%;
+  }
+
+  @media (min-width: 481px) {
+    .nup__header {
+      flex-direction: row;
+      align-items: center;
+    }
+  }
+
+  .nup__headline {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 400;
+    line-height: 32px;
+    letter-spacing: 0;
+  }
+
+  @media (min-width: 481px) {
+    .nup__headline { font-size: 32px; line-height: 40px; }
+  }
+
+  @media (min-width: 1025px) {
+    .nup__headline { font-size: 36px; line-height: 44px; }
+  }
+
+  /* ============================================================
+     4. GRID 12 KOLOM
+     ============================================================ */
+  .nup__grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (min-width: 481px)  { .nup__grid { gap: 16px; } }
+  @media (min-width: 1025px) { .nup__grid { gap: 24px; } }
+
+  /* Li adalah container query: kartu merespons lebarnya sendiri,
+     bukan lebar viewport. */
+  .nup__item {
+    grid-column: 1 / -1;
+    width: 100%;
+    container-type: inline-size;
+  }
+
+  @media (min-width: 1025px) {
+    .nup__item { grid-column: span 4; }
+  }
+
+  /* ============================================================
+     5. KARTU
+     ============================================================ */
+  .card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 520px;
+    background-color: var(--surface-card);
+    border-radius: var(--radius-card);
+    color: var(--text-primary);
+    text-decoration: none;
+    overflow: visible;
+    transition: background-color 150ms var(--ease-standard);
+  }
+
+  .card:has(a:hover) {
+    background-color: var(--surface-card-hover);
+  }
+
+  /* -------- Gambar 3:2, menempel ke tepi kartu -------- */
+  .card__image {
+    aspect-ratio: 3 / 2;
+    border-radius: var(--radius-image);
+    overflow: hidden;
+    transition:
+      border-radius 300ms var(--ease-standard),
+      background-color 150ms var(--ease-standard);
+  }
+
+  .card__image a {
+    display: block;
+    height: 100%;
+  }
+
+  .card__image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    transform: scale(1);
+    transition: transform 300ms var(--ease-standard);
+  }
+
+  /* -------- Isi kartu -------- */
+  .card__content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 24px;
+    justify-content: space-between;
+    padding: 12px 24px 24px;
+  }
+
+  .card__body {
+    display: block;
+  }
+
+  .card__link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .card__link:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  .card__headline {
+    margin: 0;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 28px;
+    letter-spacing: 0;
+    transition: color 300ms var(--ease-standard);
+  }
+
+  @media (min-width: 481px) {
+    .card__headline { font-size: 24px; line-height: 32px; }
+  }
+
+  @media (min-width: 1025px) {
+    .card__headline { font-size: 28px; line-height: 36px; }
+  }
+
+  /* Ringkasan disembunyikan pada kartu sempit (< 420px) */
+  .card__summary {
+    display: none;
+    margin: 0;
+    padding-top: 12px;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 28px;
+  }
+
+  @container (width > 420px) {
+    .card__summary {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      overflow: hidden;
+    }
+  }
+
+  .card__footer {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 24px;
+  }
+
+  /* ============================================================
+     6. CTA PILL
+     ============================================================ */
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    height: 48px;
+    padding: 12px 16px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    background-color: transparent;
+    color: var(--text-primary);
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      border-radius 300ms var(--ease-expressive),
+      background-color 150ms var(--ease-standard);
+  }
+
+  .cta__label {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    overflow: hidden;
+    padding: 0 12px;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 24px;
+    letter-spacing: 0.1px;
+  }
+
+  .cta__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+
+  .cta__icon svg {
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+  }
+
+  .cta:hover {
+    border-radius: var(--radius-pill-hover);
+    background-color: var(--cta-hover-bg);
+  }
+
+  .cta:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: 2px;
+  }
+
+  /* ============================================================
+     7. HOVER: judul, gambar, sudut gambar
+     ============================================================ */
+  .card:has(.card__headline:hover) .card__headline,
+  .card:has(.card__image:hover) .card__headline {
+    color: var(--title-hover);
+  }
+
+  .card:has(.card__image:hover) img {
+    transform: scale(1.03);
+  }
+
+  .card:has(.card__image:hover) .card__image,
+  .card:has(.card__headline:hover) .card__image {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  /* Kartu lebar (> 880px) memakai sudut penuh kembali */
+  @media (min-width: 1025px) {
+    @container (width > 880px) {
+      .card:has(.card__image:hover) .card__image,
+      .card:has(.card__headline:hover) .card__image {
+        border-bottom-left-radius: var(--radius-image);
+        border-bottom-right-radius: var(--radius-image);
+      }
+    }
+  }
+
+  /* Focus ring untuk seluruh kartu */
+  .card:has(a:focus-visible) {
+    outline: 2px solid var(--outline);
+    outline-offset: 2px;
+    border-radius: 12px;
+  }
+
+  /* ============================================================
+     8. VARIAN KARTU LEBAR (horizontal) — opsional
+     Aktif otomatis hanya bila kartu > 880px pada layar >= 1025px.
+     ============================================================ */
+  @media (min-width: 1025px) {
+    @container (width > 880px) {
+      .card {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 12px;
+        min-height: auto;
+        background-color: transparent;
+        border-radius: 16px;
+        margin: -16px;
+        padding: 16px;
+        width: auto;
+      }
+
+      .card__content {
+        grid-area: 1 / 1 / -1 / 5;
+        padding: 0;
+        justify-content: flex-start;
+      }
+
+      .card__image {
+        grid-area: 1 / 5 / -1 / -1;
+        border-radius: var(--radius-image);
+      }
+
+      .card:has(a:hover) {
+        background-color: var(--surface-card-hover);
+      }
+    }
+  }
+
+  /* ============================================================
+     9. FALLBACK & PREFERENSI PENGGUNA
+     ============================================================ */
+  @supports not selector(:has(a)) {
+    .card:hover { background-color: var(--surface-card-hover); }
+    .card:hover img { transform: scale(1.03); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card,
+    .card__image,
+    .card__image img,
+    .card__headline,
+    .cta {
+      transition: none;
+    }
+
+    .card:hover img,
+    .card:has(.card__image:hover) img,
+    .card:has(.card__headline:hover) img {
+      transform: none;
+    }
+  }
+</style>
+</head>
+<body>
+
+  <main class="page">
+    <section class="nup" aria-labelledby="nup-title">
+      <header class="nup__header">
+        <h3 id="nup-title" class="nup__headline">More updates</h3>
+      </header>
+
+      <ul class="nup__grid">
+
+        <!-- ============ KARTU 1 ============ -->
+        <li class="nup__item">
+          <article class="card" aria-labelledby="card-title-1">
+            <div class="card__image">
+              <a href="https://blog.google/innovation-and-ai/products/gemini-app/gemini-on-apple-carplay/"
+                 tabindex="-1" aria-hidden="true">
+                <img
+                  src="https://storage.googleapis.com/gweb-uniblog-publish-prod/images/Carplay_hero_image.width-800.format-webp.webp"
+                  alt=""
+                  width="800" height="533"
+                  loading="lazy" decoding="async">
+              </a>
+            </div>
+
+            <div class="card__content">
+              <div class="card__body">
+                <a class="card__link"
+                   href="https://blog.google/innovation-and-ai/products/gemini-app/gemini-on-apple-carplay/">
+                  <h4 id="card-title-1" class="card__headline">
+                    Talk it through with Gemini, now on Apple CarPlay
+                  </h4>
+                </a>
+                <p class="card__summary">
+                  Gemini is now available on Apple CarPlay.
+                </p>
+              </div>
+
+              <div class="card__footer">
+                <a class="cta"
+                   href="https://blog.google/innovation-and-ai/products/gemini-app/gemini-on-apple-carplay/"
+                   role="button"
+                   aria-label="Read article: Talk it through with Gemini, now on Apple CarPlay">
+                  <span class="cta__label">Read article</span>
+                  <span class="cta__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
+                    </svg>
+                  </span>
+                </a>
+              </div>
+            </div>
+          </article>
+        </li>
+
+        <!-- ============ KARTU 2 ============ -->
+        <li class="nup__item">
+          <article class="card" aria-labelledby="card-title-2">
+            <div class="card__image">
+              <a href="https://blog.google/products-and-platforms/products/google-fi-wireless/super-network/"
+                 tabindex="-1" aria-hidden="true">
+                <img
+                  src="https://storage.googleapis.com/gweb-uniblog-publish-prod/images/Super_Network_Hero_Thumbnail.width-800.format-webp.webp"
+                  alt=""
+                  width="800" height="533"
+                  loading="lazy" decoding="async">
+              </a>
+            </div>
+
+            <div class="card__content">
+              <div class="card__body">
+                <a class="card__link"
+                   href="https://blog.google/products-and-platforms/products/google-fi-wireless/super-network/">
+                  <h4 id="card-title-2" class="card__headline">
+                    Introducing Google Fi&#8217;s new super network
+                  </h4>
+                </a>
+                <p class="card__summary">
+                  Google Fi Wireless is launching a new super network, combining two 5G
+                  networks with millions of Wi-Fi networks in one phone plan.
+                </p>
+              </div>
+
+              <div class="card__footer">
+                <a class="cta"
+                   href="https://blog.google/products-and-platforms/products/google-fi-wireless/super-network/"
+                   role="button"
+                   aria-label="Read article: Introducing Google Fi&#8217;s new super network">
+                  <span class="cta__label">Read article</span>
+                  <span class="cta__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
+                    </svg>
+                  </span>
+                </a>
+              </div>
+            </div>
+          </article>
+        </li>
+
+        <!-- ============ KARTU 3 ============ -->
+        <li class="nup__item">
+          <article class="card" aria-labelledby="card-title-3">
+            <div class="card__image">
+              <a href="https://blog.google/company-news/inside-google/company-announcements/adobe-google-partnership-integration/"
+                 tabindex="-1" aria-hidden="true">
+                <img
+                  src="https://storage.googleapis.com/gweb-uniblog-publish-prod/images/Adobe_snippet_hero.width-800.format-webp.webp"
+                  alt=""
+                  width="800" height="533"
+                  loading="lazy" decoding="async">
+              </a>
+            </div>
+
+            <div class="card__content">
+              <div class="card__body">
+                <a class="card__link"
+                   href="https://blog.google/company-news/inside-google/company-announcements/adobe-google-partnership-integration/">
+                  <h4 id="card-title-3" class="card__headline">
+                    Bringing Adobe&#8217;s tools closer to your everyday Google apps
+                  </h4>
+                </a>
+                <p class="card__summary">
+                  Google and Adobe are integrating creative and productivity tools.
+                  Edit PDFs in Drive and use Adobe AI in Gemini.
+                </p>
+              </div>
+
+              <div class="card__footer">
+                <a class="cta"
+                   href="https://blog.google/company-news/inside-google/company-announcements/adobe-google-partnership-integration/"
+                   role="button"
+                   aria-label="Read article: Bringing Adobe&#8217;s tools closer to your everyday Google apps">
+                  <span class="cta__label">Read article</span>
+                  <span class="cta__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
+                    </svg>
+                  </span>
+                </a>
+              </div>
+            </div>
+          </article>
+        </li>
+
+      </ul>
+    </section>
+  </main>
+
+</body>
+</html>

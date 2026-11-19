@@ -9,12 +9,34 @@ import { BottomRightCorner } from './BottomRightCorner';
 
 interface HeroProps {
   onOpenAbout?: () => void;
+  title?: string;
+  subtitle?: string;
+  imageUrl?: string;
+  cornerLabel?: string;
+  cornerActionLabel?: string;
+  cornerHref?: string;
 }
 
-export function Hero({ onOpenAbout }: HeroProps) {
+const DEFAULT_HERO_TITLE = 'Pusat Pengembangan Bisnis';
+const DEFAULT_HERO_SUBTITLE =
+  'Unit strategis UIN Salatiga dalam optimalisasi aset, layanan komersial, kemitraan, dan inovasi bisnis mendukung kemandirian PTN BLU yang profesional serta berkelanjutan.';
+const DEFAULT_HERO_IMAGE =
+  'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/Auditorium-Student-Centre-di-Salatiga.png';
+
+export function Hero({
+  onOpenAbout,
+  title,
+  subtitle,
+  imageUrl,
+  cornerLabel,
+  cornerActionLabel,
+  cornerHref,
+}: HeroProps) {
   const heroRef = useRef<HTMLDivElement | null>(null);
   const prefersReducedMotion = useReducedMotion();
-  const [bgFailed, setBgFailed] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const resolvedImage = imageUrl?.trim() || DEFAULT_HERO_IMAGE;
+  const bgFailed = failedUrl === resolvedImage;
 
   const { scrollYProgress } = useScroll({
     target: heroRef,
@@ -51,10 +73,10 @@ export function Hero({ onOpenAbout }: HeroProps) {
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true, amount: 0.05 }}
               transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-              src="https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/Auditorium-Student-Centre-di-Salatiga.png"
+              src={resolvedImage}
               alt="Auditorium Student Centre UIN Salatiga"
               referrerPolicy="no-referrer"
-              onError={() => setBgFailed(true)}
+              onError={() => setFailedUrl(resolvedImage)}
               className="w-full h-full object-cover object-[65%] lg:object-center"
             />
           </motion.div>
@@ -92,7 +114,7 @@ export function Hero({ onOpenAbout }: HeroProps) {
               }}
               className="text-4xl sm:text-5xl md:text-6xl lg:text-[74px] font-normal text-[#FAF8F3] drop-shadow-sm mb-3 tracking-tight leading-[1.06] text-balance"
             >
-              Pusat Pengembangan Bisnis
+              {title?.trim() || DEFAULT_HERO_TITLE}
             </motion.h1>
 
             <motion.p
@@ -106,11 +128,16 @@ export function Hero({ onOpenAbout }: HeroProps) {
               }}
               className="text-sm sm:text-base md:text-lg text-[#F6F3EC]/90 leading-relaxed max-w-2xl font-normal"
             >
-              Unit strategis UIN Salatiga dalam optimalisasi aset, layanan komersial, kemitraan, dan inovasi bisnis mendukung kemandirian PTN BLU yang profesional serta berkelanjutan.
+              {subtitle?.trim() || DEFAULT_HERO_SUBTITLE}
             </motion.p>
           </motion.div>
 
-          <BottomRightCorner onOpenProfile={onOpenAbout} />
+          <BottomRightCorner
+            label={cornerLabel?.trim() || 'Profil P2B'}
+            actionLabel={cornerActionLabel?.trim() || 'Tentang Kami'}
+            href={cornerHref?.trim() || '/tentang-kami'}
+            onOpenProfile={onOpenAbout}
+          />
         </div>
       </motion.section>
     </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { Icon } from '@iconify/react';
 import { motion } from 'motion/react';
 
 interface PageHeroProps {
@@ -115,7 +115,7 @@ export function PageHero({
               <span className="text-[12px] md:text-[14px] font-normal whitespace-nowrap">
                 {cornerActionLabel}
               </span>
-              <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+              <Icon icon="mdi:chevron-right" className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
             </div>
           </div>
         </a>

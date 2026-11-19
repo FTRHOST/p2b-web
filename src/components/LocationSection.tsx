@@ -1,31 +1,48 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { Icon } from '@iconify/react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import {
-  Check,
-  ChevronRight,
-  Copy,
-  LocateFixed,
-  MapPin,
-  Minus,
-  Plus,
-} from 'lucide-react';
 import { motion } from 'motion/react';
+import { SiteSettings } from '../types/cms';
 
-const P2B_COORDS: [number, number] = [-7.311415209978375, 110.47916197054059];
+const DEFAULT_COORDS: [number, number] = [-7.311415209978375, 110.47916197054059];
 const DEFAULT_ZOOM = 16;
 
-export function LocationSection() {
+interface LocationSectionProps {
+  addressText?: string;
+  settings?: SiteSettings;
+}
+
+export function LocationSection({ settings }: LocationSectionProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
-  const [copied, setCopied] = useState(false);
+
+  const parsedLat = Number(settings?.location_lat);
+  const parsedLng = Number(settings?.location_lng);
+  const coords: [number, number] =
+    Number.isFinite(parsedLat) &&
+    Number.isFinite(parsedLng) &&
+    parsedLat !== 0 &&
+    parsedLng !== 0
+      ? [parsedLat, parsedLng]
+      : DEFAULT_COORDS;
+
+  const resolvedMapsUrl =
+    settings?.location_maps_url?.trim() ||
+    `https://www.google.com/maps/search/?api=1&query=${coords[0]},${coords[1]}`;
+  const resolvedPhone = settings?.contact_phone?.trim() || '0811-2520-4371';
+  const resolvedPhoneHref = `tel:${resolvedPhone.replace(/[^0-9+]/g, '').replace(/^0/, '+62')}`;
+  const resolvedEmail = settings?.contact_email?.trim() || 'p2b@uinsalatiga.ac.id';
+  const resolvedAddress =
+    settings?.location_address?.trim() ||
+    'P2B UIN Salatiga, Gedung Auditorium & Student Center Prof. Dr. H. Achmadi, Jl. Lingkar Selatan Km. 02, Pulutan, Sidorejo, Kota Salatiga, Jawa Tengah 50716.';
 
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: P2B_COORDS,
+      center: coords,
       zoom: DEFAULT_ZOOM,
       zoomControl: false,
       scrollWheelZoom: false,
@@ -60,9 +77,8 @@ export function LocationSection() {
       html: `
         <div class="relative flex flex-col items-center">
           <div class="w-11 h-11 rounded-full bg-[#164234] border-2 border-[#F4D993] shadow-lg flex items-center justify-center">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F4D993" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
-              <circle cx="12" cy="10" r="3"></circle>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#F4D993" aria-hidden="true">
+              <path d="M12 6.5A2.5 2.5 0 0 1 14.5 9a2.5 2.5 0 0 1-2.5 2.5A2.5 2.5 0 0 1 9.5 9A2.5 2.5 0 0 1 12 6.5M12 2a7 7 0 0 1 7 7c0 5.25-7 13-7 13S5 14.25 5 9a7 7 0 0 1 7-7m0 2a5 5 0 0 0-5 5c0 1 0 3 5 9.71C17 12 17 10 17 9a5 5 0 0 0-5-5" />
             </svg>
           </div>
           <div class="w-2.5 h-2.5 -mt-1.5 rotate-45 bg-[#164234] border-r border-b border-[#F4D993]"></div>
@@ -70,13 +86,17 @@ export function LocationSection() {
       `,
     });
 
-    const marker = L.marker(P2B_COORDS, { icon: customIcon }).addTo(map);
-    marker.bindPopup(
-      `<div class="font-sans text-[#164234] px-1 py-0.5">
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const buildPopupHtml = () =>
+      `<div class="font-sans text-[#164234] px-1 py-0.5 max-w-[240px]">
         <div class="font-medium text-sm">P2B UIN Salatiga</div>
-        <div class="text-xs text-[#3E544B] mt-0.5">Pusat Pengembangan Bisnis · PTN BLU</div>
-      </div>`
-    );
+        <div class="text-xs text-[#3E544B] mt-1 leading-relaxed">${esc(resolvedAddress)}</div>
+        <div class="text-[11px] text-[#8F6D26] mt-1.5">${esc(resolvedPhone)} · ${esc(resolvedEmail)}</div>
+      </div>`;
+
+    const marker = L.marker(coords, { icon: customIcon }).addTo(map);
+    marker.bindPopup(buildPopupHtml());
 
     mapInstanceRef.current = map;
     markerRef.current = marker;
@@ -88,9 +108,24 @@ export function LocationSection() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!mapInstanceRef.current || !markerRef.current) return;
+    markerRef.current.setLatLng(coords);
+    mapInstanceRef.current.setView(coords, DEFAULT_ZOOM);
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    markerRef.current.setPopupContent(
+      `<div class="font-sans text-[#164234] px-1 py-0.5 max-w-[240px]">
+        <div class="font-medium text-sm">P2B UIN Salatiga</div>
+        <div class="text-xs text-[#3E544B] mt-1 leading-relaxed">${esc(resolvedAddress)}</div>
+        <div class="text-[11px] text-[#8F6D26] mt-1.5">${esc(resolvedPhone)} · ${esc(resolvedEmail)}</div>
+      </div>`
+    );
+  }, [coords[0], coords[1], resolvedAddress, resolvedPhone, resolvedEmail]);
+
   const handleRecenter = () => {
     if (!mapInstanceRef.current) return;
-    mapInstanceRef.current.flyTo(P2B_COORDS, DEFAULT_ZOOM, { duration: 0.7 });
+    mapInstanceRef.current.flyTo(coords, DEFAULT_ZOOM, { duration: 0.7 });
     markerRef.current?.openPopup();
   };
 
@@ -100,18 +135,6 @@ export function LocationSection() {
 
   const handleZoomOut = () => {
     mapInstanceRef.current?.zoomOut();
-  };
-
-  const handleCopyCoords = async () => {
-    const coordsText = `${P2B_COORDS[0]}, ${P2B_COORDS[1]}`;
-    try {
-      await navigator.clipboard.writeText(coordsText);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    }
   };
 
   return (
@@ -130,15 +153,16 @@ export function LocationSection() {
         >
           <div className="flex flex-col gap-2">
             <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
-              Lokasi Resmi
+              {settings?.location_eyebrow?.trim() || 'Lokasi Resmi'}
             </span>
             <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-[56px] font-normal text-[#164234] tracking-tight leading-[1.06]">
-              Peta & Lokasi P2B
+              {settings?.location_heading?.trim() || 'Peta & Lokasi P2B'}
             </h2>
           </div>
 
           <p className="text-sm sm:text-base md:text-lg text-[#3E544B] leading-relaxed max-w-xl font-normal">
-            Kunjungi kantor Pusat Pengembangan Bisnis UIN Salatiga untuk konsultasi sewa aset, reservasi Gedung Auditorium, kemitraan usaha, dan layanan komersial lainnya.
+            {settings?.location_description?.trim() ||
+              'Kunjungi kantor P2B UIN Salatiga di Gedung Auditorium & Student Center Prof. Dr. H. Achmadi untuk konsultasi sewa aset, kemitraan usaha, dan layanan komersial.'}
           </p>
         </motion.div>
 
@@ -169,7 +193,7 @@ export function LocationSection() {
                 aria-label="Perbesar peta"
                 className="w-10 h-10 flex items-center justify-center text-[#164234] hover:bg-[#F6F3EC] transition-colors cursor-pointer border-b border-[#C9A45A]/20"
               >
-                <Plus className="w-4 h-4" />
+                <Icon icon="mdi:plus" className="w-4 h-4" />
               </button>
               <button
                 type="button"
@@ -177,7 +201,7 @@ export function LocationSection() {
                 aria-label="Perkecil peta"
                 className="w-10 h-10 flex items-center justify-center text-[#164234] hover:bg-[#F6F3EC] transition-colors cursor-pointer"
               >
-                <Minus className="w-4 h-4" />
+                <Icon icon="mdi:minus" className="w-4 h-4" />
               </button>
             </div>
 
@@ -187,70 +211,59 @@ export function LocationSection() {
               aria-label="Pusatkan peta ke P2B UIN Salatiga"
               className="w-10 h-10 rounded-2xl bg-white/80 backdrop-blur-xl border border-[#C9A45A]/30 flex items-center justify-center text-[#164234] hover:bg-[#164234] hover:text-[#F4D993] transition-colors cursor-pointer shadow-sm"
             >
-              <LocateFixed className="w-4 h-4" />
+              <Icon icon="mdi:crosshairs-gps" className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Floating Glassmorphism Location Info Card (Bottom-Left) */}
-          <div className="hidden sm:flex absolute bottom-6 left-6 lg:bottom-8 lg:left-8 z-[500] p-5 md:p-6 rounded-[1.5rem] md:rounded-[2.2rem] bg-white/78 backdrop-blur-xl border border-[#C9A45A]/30 flex-col gap-3 max-w-xs md:max-w-sm shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-[rgba(201,164,90,0.16)] border border-[#C9A45A]/35 flex items-center justify-center shrink-0">
-                <MapPin className="w-4 h-4 text-[#164234]" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-normal text-[#8F6D26] uppercase tracking-wider">
-                  UIN Salatiga
-                </span>
-                <h3 className="text-lg font-normal text-[#164234] tracking-tight leading-snug">
-                  Pusat Pengembangan Bisnis (P2B)
-                </h3>
-              </div>
-            </div>
-
-            <p className="text-xs md:text-sm text-[#3E544B] leading-relaxed">
-              Kawasan Kampus UIN Salatiga, Kota Salatiga, Jawa Tengah · Senin – Jumat, 08.00 – 16.00 WIB
+          {/* Desktop Frosted Glass Address & Contact Card (Top-Left) */}
+          <div className="hidden sm:flex absolute top-5 left-5 md:top-7 md:left-7 z-[500] max-w-sm rounded-3xl bg-white/88 backdrop-blur-xl border border-[#C9A45A]/30 p-5 flex-col gap-2.5 shadow-sm">
+            <span className="text-[11px] text-[#8F6D26] uppercase tracking-wider">
+              {settings?.location_card_label?.trim() || 'Alamat Kantor P2B'}
+            </span>
+            <h3 className="text-base md:text-lg font-normal text-[#164234] leading-snug">
+              {settings?.location_card_title?.trim() ||
+                'Gedung Auditorium & Student Center Prof. Dr. H. Achmadi'}
+            </h3>
+            <p className="text-xs text-[#3E544B] leading-relaxed">
+              {resolvedAddress}
             </p>
-
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <span className="text-xs text-[#3E544B] tabular-nums">
-                -7.311415, 110.479162
-              </span>
-              <button
-                type="button"
-                onClick={handleCopyCoords}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 hover:bg-white border border-[#C9A45A]/30 text-xs text-[#164234] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            <div className="pt-2 border-t border-[#C9A45A]/20 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[#164234]">
+              <a
+                href={resolvedPhoneHref}
+                className="inline-flex items-center gap-1.5 hover:text-[#8F6D26] transition-colors"
               >
-                {copied ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-[#164234]" />
-                    <span>Tersalin</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5 text-[#B89242]" />
-                    <span>Salin Koordinat</span>
-                  </>
-                )}
-              </button>
+                <Icon icon="mdi:phone-outline" className="w-3.5 h-3.5 text-[#8F6D26] shrink-0" />
+                <span>{resolvedPhone}</span>
+              </a>
+              <a
+                href={`mailto:${resolvedEmail}`}
+                className="inline-flex items-center gap-1.5 hover:text-[#8F6D26] transition-colors"
+              >
+                <Icon icon="mdi:email-outline" className="w-3.5 h-3.5 text-[#8F6D26] shrink-0" />
+                <span>{resolvedEmail}</span>
+              </a>
             </div>
           </div>
 
           {/* Mobile Compact Location Badge (Top-Left on small screens) */}
-          <div className="sm:hidden absolute top-4 left-4 right-16 z-[500] p-3.5 rounded-2xl bg-white/85 backdrop-blur-xl border border-[#C9A45A]/30 flex flex-col gap-1">
+          <div className="sm:hidden absolute top-4 left-4 right-16 z-[500] p-3.5 rounded-2xl bg-white/90 backdrop-blur-xl border border-[#C9A45A]/30 flex flex-col gap-1">
             <span className="text-[11px] text-[#8F6D26] uppercase tracking-wider">
-              Lokasi Kampus
+              {settings?.location_card_label?.trim() || 'Alamat Kantor P2B'}
             </span>
             <span className="text-sm font-normal text-[#164234]">
-              P2B UIN Salatiga
+              {settings?.location_card_title?.trim() || 'P2B UIN Salatiga'}
             </span>
-            <span className="text-[11px] text-[#3E544B] tabular-nums">
-              -7.311415, 110.479162
+            <span className="text-[11px] text-[#3E544B] leading-snug">
+              {resolvedAddress}
+            </span>
+            <span className="text-[11px] text-[#164234] pt-0.5">
+              {resolvedPhone} · {resolvedEmail}
             </span>
           </div>
 
           {/* Faux-Cutout Bottom-Right Corner for Google Maps External Directions */}
           <a
-            href={`https://www.google.com/maps/search/?api=1&query=${P2B_COORDS[0]},${P2B_COORDS[1]}`}
+            href={resolvedMapsUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="absolute bottom-0 right-0 px-6 py-4 pt-5 pl-8 sm:px-7 sm:py-5 sm:pt-6 sm:pl-10 md:px-9 md:py-6 md:pt-8 md:pl-12 bg-[#F6F3EC] rounded-tl-[1.5rem] sm:rounded-tl-[2rem] md:rounded-tl-[3.5rem] flex items-center z-[500] group"
@@ -283,13 +296,13 @@ export function LocationSection() {
 
             <div className="flex flex-col">
               <span className="text-[15px] md:text-[20px] font-normal text-[#164234] whitespace-nowrap">
-                Petunjuk Arah
+                {settings?.location_corner_label?.trim() || 'Petunjuk Arah'}
               </span>
               <div className="flex items-center gap-1 text-[#8F6D26] group-hover:text-[#164234] transition-colors">
                 <span className="text-[12px] md:text-[15px] font-normal whitespace-nowrap">
-                  Buka Maps
+                  {settings?.location_corner_action_label?.trim() || 'Buka Maps'}
                 </span>
-                <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                <Icon icon="mdi:chevron-right" className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </div>
             </div>
           </a>

@@ -1,6 +1,10 @@
-import { useState } from 'react';
-import { ArrowUpRight, Check, Mail, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Icon } from '@iconify/react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SiteSettings } from '../types/cms';
+
+const DEFAULT_HEADER_LOGO_URL =
+  'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/Logo.webp';
 
 interface LegalDoc {
   title: string;
@@ -30,7 +34,7 @@ const legalDocs: Record<string, LegalDoc> = {
     title: 'Standar Layanan Komersial',
     updated: 'Pembaruan November 2026',
     summary:
-      'Komitmen mutu pelayanan P2B UIN Salatiga pada unit Gedung Auditorium, Sewa Aset, Klinik UIN SAGA, Air Mineral, Kantin, dan Tiket.',
+      'Komitmen mutu pelayanan P2B UIN Salatiga pada unit Gedung Auditorium, Sewa Aset, Klinik Mitra Insani, UINSAGA Water, Kantin, dan Tiket.',
     sections: [
       {
         heading: '1. Profesionalitas & Kepuasan Pelanggan',
@@ -46,11 +50,11 @@ const legalDocs: Record<string, LegalDoc> = {
     title: 'Kebijakan Privasi',
     updated: 'Pembaruan November 2026',
     summary:
-      'Penjelasan mengenai perlindungan data pemohon layanan, mitra kerja sama, dan pelanggan buletin informasi P2B UIN Salatiga.',
+      'Penjelasan mengenai perlindungan data pemohon layanan dan mitra kerja sama di lingkungan Pusat Pengembangan Bisnis (P2B) UIN Salatiga.',
     sections: [
       {
         heading: '1. Penggunaan Data Pemohon',
-        body: 'Informasi kontak yang dikirimkan melalui formulir kontak maupun buletin hanya digunakan untuk koordinasi layanan dan informasi resmi P2B.',
+        body: 'Informasi kontak yang dikirimkan melalui formulir kontak hanya digunakan untuk koordinasi layanan dan informasi resmi P2B UIN Salatiga.',
       },
       {
         heading: '2. Kerahasiaan Dokumen Kemitraan',
@@ -76,156 +80,167 @@ const legalDocs: Record<string, LegalDoc> = {
   },
 };
 
-const socialLinks = [
+const serviceItems = [
   {
-    label: 'Instagram',
-    handle: '@p2b.uinsalatiga',
-    href: 'https://www.instagram.com/p2b.uinsalatiga',
+    label: 'UINSAGA Water',
+    description:
+      'Layanan Air Mineral dikelola oleh Pusat Pengembangan Bisnis (P2B) UIN Salatiga dengan proses filtrasi terstandar higienis untuk civitas dan mitra.',
+  },
+  {
+    label: 'Gedung Auditorium',
+    description:
+      'Gedung Auditorium Student Centre UIN Salatiga siap mendukung penyelenggaraan seminar nasional, wisuda, dan konferensi dengan sistem akustik modern.',
+  },
+  {
+    label: 'Pelayanan Sewa Aset',
+    description:
+      'Optimalisasi penyewaan ruang rapat, studio, dan fasilitas pendukung universitas dengan prosedur transparan sesuai tata kelola PTN BLU.',
+  },
+  {
+    label: 'Klinik Mitra Insani',
+    description:
+      'Klinik Mitra Insani melayani konsultasi kesehatan, pemeriksaan preventif, serta layanan kesehatan umum bagi mahasiswa, pegawai, dan masyarakat.',
+  },
+  {
+    label: 'Kantin',
+    description:
+      'Area Kantin kampus P2B menghadirkan beragam kuliner higienis, bersertifikat halal, dan mendukung transaksi nontunai QRIS.',
+  },
+  {
+    label: 'Tiket',
+    description:
+      'Layanan Tiket terpadu P2B memudahkan pemesanan akses acara kampus, seminar, serta layanan operasional universitas secara tertib.',
   },
 ];
 
-const navigationLinks = [
-  { label: 'Beranda', href: '#top' },
-  { label: 'Tentang P2B', href: '#who-we-are' },
-  { label: 'News & Update', href: '#news-updates' },
-  { label: 'Lokasi P2B', href: '#lokasi-p2b' },
+const navigationLinks: {
+  label: string;
+  href: string;
+  target: 'top' | 'who-we-are' | 'news-updates' | 'lokasi-p2b';
+}[] = [
+  { label: 'Beranda', href: '#top', target: 'top' },
+  { label: 'Tentang P2B', href: '#who-we-are', target: 'who-we-are' },
+  { label: 'News & Update', href: '#news-updates', target: 'news-updates' },
+  { label: 'Lokasi P2B', href: '#lokasi-p2b', target: 'lokasi-p2b' },
+];
+
+const profileLinks = [
+  { label: 'Tentang Kami', path: '/tentang-kami' },
+  { label: 'Visi & Misi', path: '/visi-misi' },
+  { label: 'Struktur Organisasi', path: '/struktur-organisasi' },
+  { label: 'Semua Berita', path: '/semua-berita' },
+];
+
+const marqueePhrases = [
+  'P2B UIN Salatiga.',
+  'PTN BLU.',
+  'UINSAGA Water.',
+  'Auditorium.',
+  'Klinik Mitra Insani.',
+  'Kemitraan.',
 ];
 
 interface FooterProps {
+  settings?: SiteSettings;
   onNavigate?: (target: 'top' | 'who-we-are' | 'news-updates' | 'lokasi-p2b') => void;
 }
 
-export function Footer({ onNavigate }: FooterProps) {
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
-  const [subscribedEmail, setSubscribedEmail] = useState<string | null>(null);
+export function Footer({ settings, onNavigate }: FooterProps) {
   const [activeLegal, setActiveLegal] = useState<LegalDoc | null>(null);
+  const [activeService, setActiveService] = useState<{
+    label: string;
+    description: string;
+  } | null>(null);
+  const [logoFailed, setLogoFailed] = useState(false);
 
-  const handleSubscribe = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = email.trim();
-    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+  const resolvedLogoUrl = settings?.header_logo_url?.trim() || DEFAULT_HEADER_LOGO_URL;
+  const resolvedBrandTitle = settings?.footer_brand_title?.trim() || 'P2B UIN Salatiga';
+  const resolvedDescription =
+    settings?.footer_description?.trim() ||
+    'Pusat Pengembangan Bisnis Universitas Islam Negeri Salatiga — Mengoptimalkan aset, layanan komersial, kemitraan, dan inovasi bisnis mendukung PTN BLU.';
+  const resolvedSocialLabel = settings?.footer_social_label?.trim() || 'Instagram';
+  const resolvedSocialUrl =
+    settings?.footer_social_url?.trim() || 'https://www.instagram.com/p2b.uinsalatiga';
+  const resolvedMapsUrl =
+    settings?.location_maps_url?.trim() ||
+    'https://www.google.com/maps/search/?api=1&query=-7.311415209978375,110.47916197054059';
+  const resolvedPhone = settings?.contact_phone?.trim() || '0811-2520-4371';
+  const resolvedPhoneHref = `tel:${resolvedPhone.replace(/[^0-9+]/g, '').replace(/^0/, '+62')}`;
+  const resolvedEmail = settings?.contact_email?.trim() || 'p2b@uinsalatiga.ac.id';
+  const resolvedAddress =
+    settings?.location_address?.trim() ||
+    'P2B UIN Salatiga, Gedung Auditorium & Student Center Prof. Dr. H. Achmadi, Jl. Lingkar Selatan Km. 02, Pulutan, Sidorejo, Kota Salatiga, Jawa Tengah 50716.';
 
-    if (!isValid) {
-      setError('Mohon masukkan alamat email yang valid.');
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [resolvedLogoUrl]);
+
+  const navigateSection = (target: 'top' | 'who-we-are' | 'news-updates' | 'lokasi-p2b') => {
+    if (onNavigate) {
+      onNavigate(target);
       return;
     }
+    if (target === 'top') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth' });
+  };
 
-    setError('');
-    setSubscribedEmail(trimmed);
-    setEmail('');
+  const navigateSpaPath = (path: string) => {
+    window.history.pushState(null, '', path);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <footer className="w-full flex justify-center px-3 md:px-5 pb-4 md:pb-6 bg-[#F6F3EC]">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.15 }}
-        transition={{ duration: 0.6, ease: 'easeOut' }}
-        className="w-full max-w-[1536px] rounded-[1.5rem] md:rounded-[3rem] bg-white/60 backdrop-blur-xl border border-[#C9A45A]/30 p-6 sm:p-10 md:p-14 text-[#164234]"
-      >
-        {/* Upper Footer Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 pb-10 border-b border-[#C9A45A]/20">
-          {/* Brand + Newsletter Signup */}
-          <div className="lg:col-span-6 flex flex-col justify-between gap-6">
-            <div className="flex flex-col gap-2 max-w-md">
-              <span className="text-2xl font-normal tracking-tight text-[#164234]">
-                P2B UIN Salatiga
-              </span>
-              <p className="text-sm md:text-base text-[#3E544B] leading-relaxed font-normal">
-                Pusat Pengembangan Bisnis Universitas Islam Negeri Salatiga — Mengoptimalkan aset, layanan komersial, kemitraan, dan inovasi bisnis mendukung PTN BLU.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2.5 max-w-md">
-              <span className="text-xs font-normal text-[#8F6D26] uppercase tracking-wider">
-                Buletin & Pembaruan P2B
-              </span>
-
-              {subscribedEmail ? (
-                <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-white/80 backdrop-blur-md border border-[#C9A45A]/30 text-sm">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-[#164234] text-[#F4D993] flex items-center justify-center shrink-0">
-                      <Check className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-[#164234] truncate">
-                      Terdaftar dengan {subscribedEmail}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSubscribedEmail(null)}
-                    className="text-xs text-[#8F6D26] hover:text-[#164234] underline underline-offset-2 shrink-0 cursor-pointer"
-                  >
-                    Ubah
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSubscribe} noValidate className="flex flex-col gap-2">
-                  <div className="flex items-center bg-white/80 backdrop-blur-md border border-[#C9A45A]/30 focus-within:border-[#164234] rounded-full p-1.5 pl-4 gap-2 transition-colors">
-                    <Mail className="w-4 h-4 text-[#B89242] shrink-0" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if (error) setError('');
-                      }}
-                      placeholder="Masukkan email untuk info layanan & berita"
-                      aria-label="Alamat email untuk buletin"
-                      className="w-full bg-transparent text-sm text-[#164234] placeholder:text-[#3E544B]/50 focus:outline-none min-w-0"
-                    />
-                    <motion.button
-                      type="submit"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="flex items-center bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] rounded-full px-4 py-2 gap-1.5 border border-[#C9A45A]/40 transition-colors shrink-0 cursor-pointer whitespace-nowrap"
+    <footer className="mt-10 md:mt-16 w-full bg-black text-white">
+      <div className="mx-auto max-w-7xl px-4 py-10 md:px-6 md:pt-16 md:pb-10">
+        {/* Top Section: Navigation Columns & Brand/Socials */}
+        <div className="flex flex-col gap-10 lg:flex-row lg:justify-between lg:gap-16">
+          {/* Navigation Links (4 Columns) */}
+          <nav
+            aria-label="Navigasi footer"
+            className="grid grid-cols-2 gap-8 md:grid-cols-4 lg:flex lg:flex-1 lg:justify-between lg:gap-8"
+          >
+            {/* Column 1: Layanan P2B */}
+            <div>
+              <h3 className="text-xl sm:text-2xl font-semibold leading-[36px] text-white">
+                Layanan P2B
+              </h3>
+              <ul className="mt-2 flex flex-col gap-2 text-base font-medium leading-6 text-white/75">
+                {serviceItems.map((service) => (
+                  <li key={service.label}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveService(service)}
+                      className="text-left hover:text-white transition-colors cursor-pointer bg-transparent border-0 p-0"
                     >
-                      <span className="text-xs md:text-sm font-normal">Langganan</span>
-                      <ArrowUpRight className="w-3.5 h-3.5 text-[#F4D993]" />
-                    </motion.button>
-                  </div>
-                  {error && (
-                    <span className="text-xs text-[#9b2c2c] pl-4">{error}</span>
-                  )}
-                </form>
-              )}
+                      {service.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </div>
 
-          {/* Link Columns */}
-          <div className="lg:col-span-6 grid grid-cols-2 sm:grid-cols-3 gap-8">
-            {/* Navigation */}
-            <div className="flex flex-col gap-3">
-              <span className="text-xs font-normal text-[#8F6D26] uppercase tracking-wider">
-                Navigasi
-              </span>
-              <ul className="flex flex-col gap-2.5 text-sm">
-                {navigationLinks.map((item) => (
-                  <li key={item.label}>
+            {/* Column 2: Profil & Berita */}
+            <div>
+              <h3 className="text-xl sm:text-2xl font-semibold leading-[36px] text-white">
+                Profil & Berita
+              </h3>
+              <ul className="mt-2 flex flex-col gap-2 text-base font-medium leading-6 text-white/75">
+                {profileLinks.map((item) => (
+                  <li key={item.path}>
                     <a
-                      href={item.href}
+                      href={item.path}
                       onClick={(e) => {
-                        e.preventDefault();
-                        const target = item.href.slice(1) as
-                          | 'top'
-                          | 'who-we-are'
-                          | 'news-updates'
-                          | 'lokasi-p2b';
-                        if (onNavigate) {
-                          onNavigate(target);
+                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
                           return;
                         }
-                        if (target === 'top') {
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        } else {
-                          document
-                            .getElementById(target)
-                            ?.scrollIntoView({ behavior: 'smooth' });
-                        }
+                        e.preventDefault();
+                        navigateSpaPath(item.path);
                       }}
-                      className="text-[#3E544B] hover:text-[#164234] transition-colors whitespace-nowrap"
+                      className="hover:text-white transition-colors"
                     >
                       {item.label}
                     </a>
@@ -234,40 +249,41 @@ export function Footer({ onNavigate }: FooterProps) {
               </ul>
             </div>
 
-            {/* Social Media */}
-            <div className="flex flex-col gap-3">
-              <span className="text-xs font-normal text-[#8F6D26] uppercase tracking-wider">
-                Media Sosial
-              </span>
-              <ul className="flex flex-col gap-2.5 text-sm">
-                {socialLinks.map((item) => (
+            {/* Column 3: Navigasi */}
+            <div>
+              <h3 className="text-xl sm:text-2xl font-semibold leading-[36px] text-white">
+                Navigasi
+              </h3>
+              <ul className="mt-2 flex flex-col gap-2 text-base font-medium leading-6 text-white/75">
+                {navigationLinks.map((item) => (
                   <li key={item.label}>
                     <a
                       href={item.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[#3E544B] hover:text-[#164234] transition-colors group whitespace-nowrap"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigateSection(item.target);
+                      }}
+                      className="hover:text-white transition-colors"
                     >
-                      <span>{item.label}</span>
-                      <ArrowUpRight className="w-3.5 h-3.5 text-[#B89242] opacity-80 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+                      {item.label}
                     </a>
                   </li>
                 ))}
               </ul>
             </div>
 
-            {/* Legal & Governance */}
-            <div className="flex flex-col gap-3 col-span-2 sm:col-span-1">
-              <span className="text-xs font-normal text-[#8F6D26] uppercase tracking-wider">
+            {/* Column 4: Dokumen Resmi */}
+            <div>
+              <h3 className="text-xl sm:text-2xl font-semibold leading-[36px] text-white">
                 Dokumen Resmi
-              </span>
-              <ul className="flex flex-col gap-2.5 text-sm">
+              </h3>
+              <ul className="mt-2 flex flex-col gap-2 text-base font-medium leading-6 text-white/75">
                 {Object.keys(legalDocs).map((docKey) => (
                   <li key={docKey}>
                     <button
                       type="button"
                       onClick={() => setActiveLegal(legalDocs[docKey])}
-                      className="text-left text-[#3E544B] hover:text-[#164234] transition-colors cursor-pointer whitespace-nowrap bg-transparent border-0 p-0"
+                      className="text-left hover:text-white transition-colors cursor-pointer bg-transparent border-0 p-0"
                     >
                       {docKey}
                     </button>
@@ -275,37 +291,235 @@ export function Footer({ onNavigate }: FooterProps) {
                 ))}
               </ul>
             </div>
+          </nav>
+
+          {/* Social Icons & Header Logo */}
+          <div className="flex flex-col items-center gap-5 lg:items-end lg:max-w-[330px]">
+            <ul className="flex flex-row gap-2">
+              {/* Instagram */}
+              <li>
+                <a
+                  title={resolvedSocialLabel}
+                  aria-label={`Ikuti P2B UIN Salatiga di ${resolvedSocialLabel}`}
+                  className="group block size-14 border-b-[3px] border-neutral-800 p-3 opacity-80 transition-all duration-300 ease-in-out hover:rounded-2xl hover:bg-neutral-800 hover:opacity-100"
+                  href={resolvedSocialUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span className="block opacity-65 transition-opacity duration-300 group-hover:opacity-100">
+                    <Icon icon="mdi:instagram" className="w-8 h-8 text-white" />
+                  </span>
+                </a>
+              </li>
+
+              {/* Peta Lokasi Google Maps */}
+              <li>
+                <a
+                  title="Lokasi Kampus P2B UIN Salatiga"
+                  aria-label="Buka lokasi P2B UIN Salatiga di Google Maps"
+                  className="group block size-14 border-b-[3px] border-neutral-800 p-3 opacity-80 transition-all duration-300 ease-in-out hover:rounded-2xl hover:bg-neutral-800 hover:opacity-100"
+                  href={resolvedMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span className="block opacity-65 transition-opacity duration-300 group-hover:opacity-100">
+                    <Icon icon="mdi:map-marker-outline" className="w-8 h-8 text-white" />
+                  </span>
+                </a>
+              </li>
+
+              {/* Portal Berita */}
+              <li>
+                <a
+                  title="Portal Berita P2B"
+                  aria-label="Lihat semua berita P2B UIN Salatiga"
+                  className="group block size-14 border-b-[3px] border-neutral-800 p-3 opacity-80 transition-all duration-300 ease-in-out hover:rounded-2xl hover:bg-neutral-800 hover:opacity-100"
+                  href="/semua-berita"
+                  onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+                      return;
+                    }
+                    e.preventDefault();
+                    navigateSpaPath('/semua-berita');
+                  }}
+                >
+                  <span className="block opacity-65 transition-opacity duration-300 group-hover:opacity-100">
+                    <Icon icon="mdi:newspaper-variant-outline" className="w-8 h-8 text-white" />
+                  </span>
+                </a>
+              </li>
+            </ul>
+
+            {/* Logo dari Header + Deskripsi Instansi */}
+            <div className="flex flex-col items-center lg:items-end gap-3">
+              <a
+                href="/"
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+                    return;
+                  }
+                  e.preventDefault();
+                  navigateSection('top');
+                }}
+                aria-label={resolvedBrandTitle}
+                className="inline-flex items-center hover:opacity-90 transition-opacity"
+              >
+                {!logoFailed && resolvedLogoUrl ? (
+                  <img
+                    src={resolvedLogoUrl}
+                    alt={resolvedBrandTitle}
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                    decoding="async"
+                    onError={() => setLogoFailed(true)}
+                    className="h-12 md:h-14 w-auto object-contain"
+                  />
+                ) : (
+                  <span className="text-xl font-semibold tracking-tight text-white">
+                    {resolvedBrandTitle}
+                  </span>
+                )}
+              </a>
+              <p className="text-xs sm:text-sm text-white/65 leading-relaxed text-center lg:text-right">
+                {resolvedDescription}
+              </p>
+
+              {/* Kontak Resmi & Alamat Kantor P2B */}
+              <div className="mt-1 flex flex-col items-center lg:items-end gap-1.5 text-xs text-white/75 text-center lg:text-right">
+                <a
+                  href={resolvedPhoneHref}
+                  className="inline-flex items-center gap-1.5 hover:text-white transition-colors"
+                >
+                  <Icon icon="mdi:phone-outline" className="w-3.5 h-3.5 text-[#eab308] shrink-0" />
+                  <span>{resolvedPhone}</span>
+                </a>
+                <a
+                  href={`mailto:${resolvedEmail}`}
+                  className="inline-flex items-center gap-1.5 hover:text-white transition-colors"
+                >
+                  <Icon icon="mdi:email-outline" className="w-3.5 h-3.5 text-[#eab308] shrink-0" />
+                  <span>{resolvedEmail}</span>
+                </a>
+                <div className="inline-flex items-start justify-center lg:justify-end gap-1.5 text-white/60 leading-relaxed max-w-xs">
+                  <Icon icon="mdi:map-marker-outline" className="w-3.5 h-3.5 text-[#eab308] shrink-0 mt-0.5" />
+                  <span>{resolvedAddress}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Bottom Copyright Row */}
-        <div className="pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-[#3E544B]/80">
-          <span>© 2026 Pusat Pengembangan Bisnis (P2B) UIN Salatiga. Hak cipta dilindungi.</span>
-          <div className="flex items-center gap-5">
+        {/* Copyright & Underlined Legal Links */}
+        <div className="mt-8 flex flex-col items-center gap-2 text-center md:mt-10 md:flex-row md:justify-center md:gap-2">
+          <span className="text-[15px] md:text-[16px] font-normal leading-[150%] text-white/70">
+            {settings?.footer_copyright?.trim() ||
+              '© 2026 Pusat Pengembangan Bisnis (P2B) UIN Salatiga. Hak cipta dilindungi.'}
+          </span>
+          <div className="flex flex-wrap items-center justify-center gap-2 text-[15px] md:text-[16px]">
             <button
               type="button"
               onClick={() => setActiveLegal(legalDocs['Tata Kelola PTN BLU'])}
-              className="hover:text-[#164234] transition-colors cursor-pointer bg-transparent border-0 p-0"
+              className="text-white/70 decoration-[#eab308] underline underline-offset-[25%] transition-colors hover:text-white cursor-pointer bg-transparent border-0 p-0"
             >
               Tata Kelola
             </button>
+            <span className="text-white/70" aria-hidden="true">
+              ·
+            </span>
             <button
               type="button"
               onClick={() => setActiveLegal(legalDocs['Kebijakan Privasi'])}
-              className="hover:text-[#164234] transition-colors cursor-pointer bg-transparent border-0 p-0"
+              className="text-white/70 decoration-[#eab308] underline underline-offset-[25%] transition-colors hover:text-white cursor-pointer bg-transparent border-0 p-0"
             >
               Privasi
             </button>
+            <span className="text-white/70" aria-hidden="true">
+              ·
+            </span>
             <button
               type="button"
               onClick={() => setActiveLegal(legalDocs['Standar Layanan'])}
-              className="hover:text-[#164234] transition-colors cursor-pointer bg-transparent border-0 p-0"
+              className="text-white/70 decoration-[#eab308] underline underline-offset-[25%] transition-colors hover:text-white cursor-pointer bg-transparent border-0 p-0"
             >
               Standar Layanan
             </button>
           </div>
         </div>
-      </motion.div>
+      </div>
+
+      {/* Bottom Marquee Banner */}
+      <div aria-hidden="true">
+        <div className="rfm-marquee-container overflow-hidden pb-12 md:pb-16">
+          <div className="rfm-overlay" />
+          <div className="rfm-marquee">
+            <div className="rfm-initial-child-container">
+              {marqueePhrases.map((phrase, idx) => (
+                <div key={`m1-${idx}`} className="rfm-child">
+                  <p className="text-[64px] sm:text-[110px] md:text-[160px] lg:text-[200px] font-semibold leading-[110%] text-[#6b6b6b] whitespace-nowrap m-0">
+                    {phrase}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rfm-marquee">
+            {marqueePhrases.map((phrase, idx) => (
+              <div key={`m2-${idx}`} className="rfm-child">
+                <p className="text-[64px] sm:text-[110px] md:text-[160px] lg:text-[200px] font-semibold leading-[110%] text-[#6b6b6b] whitespace-nowrap m-0">
+                  {phrase}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Service Info Modal */}
+      <AnimatePresence>
+        {activeService && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setActiveService(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/45 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-3xl bg-[#FAF8F3] border border-[#C9A45A]/30 p-6 md:p-8 text-[#164234] shadow-lg relative"
+            >
+              <button
+                type="button"
+                onClick={() => setActiveService(null)}
+                aria-label="Tutup detail layanan"
+                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[rgba(22,66,52,0.15)] flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <Icon icon="mdi:close" className="w-4 h-4 text-[#164234]" />
+              </button>
+
+              <span className="text-xs text-[#8F6D26]">Unit Layanan P2B UIN Salatiga</span>
+              <h3 className="text-2xl font-normal tracking-tight mt-1 mb-3">
+                {activeService.label}
+              </h3>
+              <p className="text-sm text-[#3E544B] leading-relaxed mb-6">
+                {activeService.description}
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setActiveService(null)}
+                className="w-full py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Legal Documentation Modal */}
       <AnimatePresence>
@@ -315,7 +529,7 @@ export function Footer({ onNavigate }: FooterProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setActiveLegal(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/25 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/45 backdrop-blur-sm"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96, y: 10 }}
@@ -331,12 +545,10 @@ export function Footer({ onNavigate }: FooterProps) {
                 aria-label="Tutup dokumen"
                 className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[rgba(22,66,52,0.15)] flex items-center justify-center transition-colors cursor-pointer"
               >
-                <X className="w-4 h-4 text-[#164234]" />
+                <Icon icon="mdi:close" className="w-4 h-4 text-[#164234]" />
               </button>
 
-              <span className="text-xs text-[#8F6D26]">
-                {activeLegal.updated}
-              </span>
+              <span className="text-xs text-[#8F6D26]">{activeLegal.updated}</span>
               <h3 className="text-2xl font-normal tracking-tight mt-1 mb-2">
                 {activeLegal.title}
               </h3>
