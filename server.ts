@@ -173,23 +173,6 @@ const SEED_NEWS = [
   },
 ];
 
-const SEED_SETTINGS: Record<string, string> = {
-  hero_title: 'Pusat Pengembangan Bisnis',
-  hero_subtitle:
-    'Unit strategis UIN Salatiga dalam optimalisasi aset, layanan komersial, kemitraan, dan inovasi bisnis mendukung kemandirian PTN BLU yang profesional serta berkelanjutan.',
-  hero_image_url:
-    'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/Auditorium-Student-Centre-di-Salatiga.png',
-  about_heading: 'Penggerak Ekosistem Bisnis PTN BLU',
-  about_p1:
-    'Pusat Pengembangan Bisnis (P2B) Universitas Islam Negeri (UIN) Salatiga merupakan unit strategis universitas yang berperan dalam mengembangkan, mengelola, dan mengoptimalkan potensi bisnis serta layanan komersial universitas dalam mendukung penguatan kelembagaan sebagai Perguruan Tinggi Negeri Badan Layanan Umum (PTN BLU).',
-  about_p2:
-    'Sebagai bagian dari ekosistem entrepreneurial university, P2B hadir melalui pengelolaan aset, pengembangan layanan, pembangunan kemitraan, dan penciptaan inovasi bisnis secara transparan, akuntabel, profesional, serta berkelanjutan untuk mendukung kemandirian universitas dan memperluas manfaat bagi sivitas akademika maupun masyarakat.',
-  contact_phone: '0811-2520-4371',
-  contact_email: 'p2b@uinsalatiga.ac.id',
-  location_address:
-    'P2B UIN Salatiga, Gedung Auditorium & Student Center Prof. Dr. H. Achmadi, Jl. Lingkar Selatan Km. 02, Pulutan, Sidorejo, Kota Salatiga, Jawa Tengah 50716.',
-};
-
 const SEED_ORG_MEMBERS = [
   {
     name: 'Rektor UIN Salatiga',
@@ -447,14 +430,6 @@ async function ensureDatabaseReady(): Promise<void> {
     `);
 
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS cms_site_settings (
-        setting_key VARCHAR(100) PRIMARY KEY,
-        setting_value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-
-    await pool.query(`
       CREATE TABLE IF NOT EXISTS cms_org_members (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(160) NOT NULL,
@@ -529,34 +504,6 @@ async function ensureDatabaseReady(): Promise<void> {
           ]
         );
       }
-    }
-
-    // Seed site settings if empty & ensure institutional contact settings exist
-    const [settingsCountRows] = await pool.query<RowDataPacket[]>(
-      'SELECT COUNT(*) AS total FROM cms_site_settings'
-    );
-    if (Number(settingsCountRows[0]?.total || 0) === 0) {
-      for (const [key, value] of Object.entries(SEED_SETTINGS)) {
-        await pool.query(
-          'INSERT INTO cms_site_settings (setting_key, setting_value) VALUES (?, ?)',
-          [key, value]
-        );
-      }
-    } else {
-      for (const key of ['contact_phone', 'contact_email', 'location_address'] as const) {
-        await pool.query(
-          'INSERT IGNORE INTO cms_site_settings (setting_key, setting_value) VALUES (?, ?)',
-          [key, SEED_SETTINGS[key]]
-        );
-      }
-      await pool.query(
-        'UPDATE cms_site_settings SET setting_value = ? WHERE setting_key = ? AND setting_value = ?',
-        [
-          SEED_SETTINGS.location_address,
-          'location_address',
-          'Kawasan Kampus UIN Salatiga, Kota Salatiga, Jawa Tengah · Senin – Jumat, 08.00 – 16.00 WIB',
-        ]
-      );
     }
 
     // Seed organizational structure members if empty
@@ -1243,9 +1190,6 @@ async function startServer() {
       const [newsRows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_news WHERE is_published = 1 ORDER BY sort_order ASC, id DESC'
       );
-      const [settingRows] = await pool.query<RowDataPacket[]>(
-        'SELECT setting_key, setting_value FROM cms_site_settings'
-      );
       const [orgRows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_org_members WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
       );
@@ -1256,15 +1200,10 @@ async function startServer() {
         'SELECT * FROM cms_partner_logos WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
       );
 
-      const settings: Record<string, string> = {};
-      for (const row of settingRows) {
-        settings[String(row.setting_key)] = String(row.setting_value);
-      }
-
       res.json({
         ok: true,
         news: newsRows.map(mapNewsRow),
-        settings,
+        settings: {},
         orgMembers: orgRows.map(mapOrgMemberRow),
         partnerLogos: logoRows.map(mapPartnerLogoRow),
         categories: categoryRows.map((c) => ({
@@ -2604,50 +2543,6 @@ async function startServer() {
     }
   });
 
-  // CMS Site Settings
-  app.get('/api/cms/settings', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
-    try {
-      const [rows] = await pool.query<RowDataPacket[]>(
-        'SELECT setting_key, setting_value FROM cms_site_settings'
-      );
-      const settings: Record<string, string> = {};
-      for (const row of rows) {
-        settings[String(row.setting_key)] = String(row.setting_value);
-      }
-      res.json({ ok: true, settings });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal memuat pengaturan situs.',
-      });
-    }
-  });
-
-  app.put('/api/cms/settings', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
-    const { settings } = req.body as { settings?: Record<string, string> };
-    if (!settings || typeof settings !== 'object') {
-      res.status(400).json({ ok: false, message: 'Format pengaturan tidak valid.' });
-      return;
-    }
-
-    try {
-      for (const [key, val] of Object.entries(settings)) {
-        await pool.query(
-          `INSERT INTO cms_site_settings (setting_key, setting_value)
-           VALUES (?, ?)
-           ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
-          [key.slice(0, 100), String(val ?? '')]
-        );
-      }
-      res.json({ ok: true });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal menyimpan pengaturan.',
-      });
-    }
-  });
-
   // CMS Contact Inbox & Newsletter Subscribers
   app.get('/api/cms/inbox', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
     try {
@@ -2865,50 +2760,30 @@ async function startServer() {
       }
     } else if (cleanPath.startsWith('/berita/')) {
       // No DB fallback: allow client router to resolve bundled articles
-    } else if (cleanPath === '/' && dbReady) {
-      try {
-        const [settingRows] = await pool.query<RowDataPacket[]>(
-          "SELECT setting_key, setting_value FROM cms_site_settings WHERE setting_key IN ('hero_title', 'hero_subtitle', 'hero_image_url')"
-        );
-        const sMap: Record<string, string> = {};
-        for (const r of settingRows) {
-          sMap[String(r.setting_key)] = String(r.setting_value);
-        }
-        if (sMap.hero_title?.trim()) {
-          title = `${sMap.hero_title.trim()} — UIN Salatiga`;
-        }
-        if (sMap.hero_subtitle?.trim()) {
-          description = sMap.hero_subtitle.trim().slice(0, 160);
-        }
-        if (sMap.hero_image_url?.trim()) {
-          ogImage = toAbsoluteSeoUrl(baseUrl, sMap.hero_image_url.trim());
-        }
-        jsonLd = {
-          '@context': 'https://schema.org',
-          '@type': 'WebSite',
-          name: 'P2B UIN Salatiga',
-          url: baseUrl,
-          description,
-          publisher: {
-            '@type': 'Organization',
-            name: 'Pusat Pengembangan Bisnis UIN Salatiga',
-            logo: 'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2023/08/logo_ico_2.png',
-            telephone: '0811-2520-4371',
-            email: 'p2b@uinsalatiga.ac.id',
-            address: {
-              '@type': 'PostalAddress',
-              streetAddress:
-                'Gedung Auditorium & Student Center Prof. Dr. H. Achmadi, Jl. Lingkar Selatan Km. 02, Pulutan, Sidorejo',
-              addressLocality: 'Kota Salatiga',
-              addressRegion: 'Jawa Tengah',
-              postalCode: '50716',
-              addressCountry: 'ID',
-            },
+    } else if (cleanPath === '/') {
+      jsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'P2B UIN Salatiga',
+        url: baseUrl,
+        description,
+        publisher: {
+          '@type': 'Organization',
+          name: 'Pusat Pengembangan Bisnis UIN Salatiga',
+          logo: 'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2023/08/logo_ico_2.png',
+          telephone: '0811-2520-4371',
+          email: 'p2b@uinsalatiga.ac.id',
+          address: {
+            '@type': 'PostalAddress',
+            streetAddress:
+              'Gedung Auditorium & Student Center Prof. Dr. H. Achmadi, Jl. Lingkar Selatan Km. 02, Pulutan, Sidorejo',
+            addressLocality: 'Kota Salatiga',
+            addressRegion: 'Jawa Tengah',
+            postalCode: '50716',
+            addressCountry: 'ID',
           },
-        };
-      } catch {
-        // Fallback to default homepage SEO
-      }
+        },
+      };
     } else if (cleanPath !== '/') {
       status = 404;
       title = '404 — Halaman Tidak Ditemukan · P2B UIN Salatiga';

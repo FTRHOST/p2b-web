@@ -178,7 +178,7 @@ export function LocationSection({ settings }: LocationSectionProps) {
           <div
             ref={mapContainerRef}
             aria-label="Peta lokasi Pusat Pengembangan Bisnis UIN Salatiga"
-            className="w-full h-full z-0 [&_.leaflet-tile-pane]:saturate-[0.88] [&_.leaflet-tile-pane]:sepia-[0.08]"
+            className="w-full h-full z-0 [&_.leaflet-tile-pane]:saturate-[0.88] [&_.leaflet-tile-pane]:sepia-[0.08] [&_.leaflet-popup-content-wrapper]:!bg-[#FAF8F3]/72 [&_.leaflet-popup-content-wrapper]:backdrop-blur-xl [&_.leaflet-popup-content-wrapper]:backdrop-saturate-150 [&_.leaflet-popup-content-wrapper]:!border [&_.leaflet-popup-content-wrapper]:!border-white/70 [&_.leaflet-popup-content-wrapper]:!rounded-2xl [&_.leaflet-popup-content-wrapper]:!shadow-[0_10px_28px_rgba(11,38,29,0.14)] [&_.leaflet-popup-tip]:!bg-[#FAF8F3]/72"
           />
 
           {/* Subtle Cream-Emerald Perimeter Tint (pointer-events-none so map stays interactive) */}
@@ -186,12 +186,12 @@ export function LocationSection({ settings }: LocationSectionProps) {
 
           {/* Top-Right Frosted Glass Map Controls */}
           <div className="absolute top-4 right-4 md:top-7 md:right-7 z-[500] flex flex-col gap-2">
-            <div className="flex flex-col rounded-2xl bg-white/80 backdrop-blur-xl border border-[#C9A45A]/30 overflow-hidden shadow-sm">
+            <div className="flex flex-col rounded-2xl bg-[#FAF8F3]/55 backdrop-blur-xl backdrop-saturate-150 border border-white/70 ring-1 ring-[#C9A45A]/25 overflow-hidden shadow-[0_10px_28px_rgba(11,38,29,0.12)]">
               <button
                 type="button"
                 onClick={handleZoomIn}
                 aria-label="Perbesar peta"
-                className="w-10 h-10 flex items-center justify-center text-[#164234] hover:bg-[#F6F3EC] transition-colors cursor-pointer border-b border-[#C9A45A]/20"
+                className="w-10 h-10 flex items-center justify-center text-[#164234] hover:bg-white/60 transition-colors cursor-pointer border-b border-white/50"
               >
                 <Icon icon="mdi:plus" className="w-4 h-4" />
               </button>
@@ -199,7 +199,7 @@ export function LocationSection({ settings }: LocationSectionProps) {
                 type="button"
                 onClick={handleZoomOut}
                 aria-label="Perkecil peta"
-                className="w-10 h-10 flex items-center justify-center text-[#164234] hover:bg-[#F6F3EC] transition-colors cursor-pointer"
+                className="w-10 h-10 flex items-center justify-center text-[#164234] hover:bg-white/60 transition-colors cursor-pointer"
               >
                 <Icon icon="mdi:minus" className="w-4 h-4" />
               </button>
@@ -209,14 +209,14 @@ export function LocationSection({ settings }: LocationSectionProps) {
               type="button"
               onClick={handleRecenter}
               aria-label="Pusatkan peta ke P2B UIN Salatiga"
-              className="w-10 h-10 rounded-2xl bg-white/80 backdrop-blur-xl border border-[#C9A45A]/30 flex items-center justify-center text-[#164234] hover:bg-[#164234] hover:text-[#F4D993] transition-colors cursor-pointer shadow-sm"
+              className="w-10 h-10 rounded-2xl bg-[#FAF8F3]/55 backdrop-blur-xl backdrop-saturate-150 border border-white/70 ring-1 ring-[#C9A45A]/25 flex items-center justify-center text-[#164234] hover:bg-[#164234]/85 hover:text-[#F4D993] transition-colors cursor-pointer shadow-[0_10px_28px_rgba(11,38,29,0.12)]"
             >
               <Icon icon="mdi:crosshairs-gps" className="w-4 h-4" />
             </button>
           </div>
 
           {/* Desktop Frosted Glass Address & Contact Card (Top-Left) */}
-          <div className="hidden sm:flex absolute top-5 left-5 md:top-7 md:left-7 z-[500] max-w-sm rounded-3xl bg-white/88 backdrop-blur-xl border border-[#C9A45A]/30 p-5 flex-col gap-2.5 shadow-sm">
+          <div className="hidden sm:flex absolute top-5 left-5 md:top-7 md:left-7 z-[500] max-w-sm rounded-3xl bg-[#FAF8F3]/55 backdrop-blur-xl backdrop-saturate-150 border border-white/70 ring-1 ring-[#C9A45A]/25 p-5 flex-col gap-2.5 shadow-[0_12px_32px_rgba(11,38,29,0.12)]">
             <span className="text-[11px] text-[#8F6D26] uppercase tracking-wider">
               {settings?.location_card_label?.trim() || 'Alamat Kantor P2B'}
             </span>
@@ -224,10 +224,10 @@ export function LocationSection({ settings }: LocationSectionProps) {
               {settings?.location_card_title?.trim() ||
                 'Gedung Auditorium & Student Center Prof. Dr. H. Achmadi'}
             </h3>
-            <p className="text-xs text-[#3E544B] leading-relaxed">
+            <p className="text-xs text-[#2B4339] leading-relaxed">
               {resolvedAddress}
             </p>
-            <div className="pt-2 border-t border-[#C9A45A]/20 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[#164234]">
+            <div className="pt-2 border-t border-[#164234]/12 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[#164234]">
               <a
                 href={resolvedPhoneHref}
                 className="inline-flex items-center gap-1.5 hover:text-[#8F6D26] transition-colors"
@@ -261,45 +261,19 @@ export function LocationSection({ settings }: LocationSectionProps) {
             </span>
           </div>
 
-          {/* Faux-Cutout Bottom-Right Corner for Google Maps External Directions */}
+          {/* Floating Frosted Glass Bottom-Right Card for Google Maps External Directions */}
           <a
             href={resolvedMapsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute bottom-0 right-0 px-6 py-4 pt-5 pl-8 sm:px-7 sm:py-5 sm:pt-6 sm:pl-10 md:px-9 md:py-6 md:pt-8 md:pl-12 bg-[#F6F3EC] rounded-tl-[1.5rem] sm:rounded-tl-[2rem] md:rounded-tl-[3.5rem] flex items-center z-[500] group"
+            className="absolute bottom-4 right-4 md:bottom-7 md:right-7 z-[500] px-5 py-3.5 sm:px-6 sm:py-4 rounded-2xl sm:rounded-3xl bg-[#FAF8F3]/55 hover:bg-[#FAF8F3]/72 backdrop-blur-xl backdrop-saturate-150 border border-white/70 ring-1 ring-[#C9A45A]/25 shadow-[0_12px_32px_rgba(11,38,29,0.12)] flex items-center transition-all group"
           >
-            {/* Top intersection mask */}
-            <div className="absolute -top-[1.5rem] sm:-top-[2rem] md:-top-[3.5rem] right-0 w-[1.5rem] sm:w-[2rem] md:w-[3.5rem] h-[1.5rem] sm:h-[2rem] md:h-[3.5rem] pointer-events-none">
-              <svg
-                width="100%"
-                height="100%"
-                viewBox="0 0 56 56"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M56 56V0C56 30.9279 30.9279 56 0 56H56Z" fill="#F6F3EC" />
-              </svg>
-            </div>
-
-            {/* Left intersection mask */}
-            <div className="absolute bottom-0 -left-[1.5rem] sm:-left-[2rem] md:-left-[3.5rem] w-[1.5rem] sm:w-[2rem] md:w-[3.5rem] h-[1.5rem] sm:h-[2rem] md:h-[3.5rem] pointer-events-none">
-              <svg
-                width="100%"
-                height="100%"
-                viewBox="0 0 56 56"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M56 56H0C30.9279 56 56 30.9279 56 0V56Z" fill="#F6F3EC" />
-              </svg>
-            </div>
-
             <div className="flex flex-col">
-              <span className="text-[15px] md:text-[20px] font-normal text-[#164234] whitespace-nowrap">
+              <span className="text-[15px] md:text-[18px] font-normal text-[#164234] whitespace-nowrap">
                 {settings?.location_corner_label?.trim() || 'Petunjuk Arah'}
               </span>
               <div className="flex items-center gap-1 text-[#8F6D26] group-hover:text-[#164234] transition-colors">
-                <span className="text-[12px] md:text-[15px] font-normal whitespace-nowrap">
+                <span className="text-[12px] md:text-[14px] font-normal whitespace-nowrap">
                   {settings?.location_corner_action_label?.trim() || 'Buka Maps'}
                 </span>
                 <Icon icon="mdi:chevron-right" className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />

@@ -13,7 +13,6 @@ import {
   NewsCategoryItem,
   OrgMemberItem,
   PartnerLogoItem,
-  SiteSettings,
 } from '../types/cms';
 import {
   DEFAULT_NEWS_CATEGORIES,
@@ -77,7 +76,6 @@ type CmsTab =
   | 'media'
   | 'logos'
   | 'org'
-  | 'pages'
   | 'inbox'
   | 'security';
 
@@ -107,7 +105,6 @@ export function CmsDashboard({
   const [mediaItems, setMediaItems] = useState<CmsMediaItem[]>([]);
   const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'pdf'>('all');
   const [mediaSearch, setMediaSearch] = useState('');
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>({});
   const [messages, setMessages] = useState<CmsContactMessage[]>([]);
   const [subscribers, setSubscribers] = useState<CmsNewsletterSubscriber[]>([]);
   const [bannerNotice, setBannerNotice] = useState('');
@@ -174,9 +171,6 @@ export function CmsDashboard({
   const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null);
   const [categoryError, setCategoryError] = useState('');
 
-  // Settings form state
-  const [savingSettings, setSavingSettings] = useState(false);
-
   // Organizational Structure State
   const [orgMembers, setOrgMembers] = useState<OrgMemberItem[]>([]);
   const [orgModalOpen, setOrgModalOpen] = useState(false);
@@ -235,14 +229,13 @@ export function CmsDashboard({
 
   const loadAllCmsData = useCallback(async () => {
     try {
-      const [ovRes, newsRes, catRes, mediaRes, orgRes, logoRes, setRes, inbRes] = await Promise.all([
+      const [ovRes, newsRes, catRes, mediaRes, orgRes, logoRes, inbRes] = await Promise.all([
         fetch('/api/cms/overview', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/news', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/categories', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/media', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/org-members', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/partner-logos', { headers: authHeaders(), credentials: 'include' }),
-        fetch('/api/cms/settings', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/inbox', { headers: authHeaders(), credentials: 'include' }),
       ]);
 
@@ -275,10 +268,6 @@ export function CmsDashboard({
           setPartnerLogos(d.items);
           setLogoOrderDirty(false);
         }
-      }
-      if (setRes.ok) {
-        const d = (await setRes.json()) as { settings?: SiteSettings };
-        if (d.settings) setSiteSettings(d.settings);
       }
       if (inbRes.ok) {
         const d = (await inbRes.json()) as {
@@ -994,25 +983,6 @@ export function CmsDashboard({
     }
   };
 
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSavingSettings(true);
-    try {
-      const res = await fetch('/api/cms/settings', {
-        method: 'PUT',
-        headers: authHeaders(),
-        credentials: 'include',
-        body: JSON.stringify({ settings: siteSettings }),
-      });
-      if (res.ok) {
-        onPublicDataChanged();
-        notify('Pengaturan konten halaman tersimpan ke MariaDB.');
-      }
-    } finally {
-      setSavingSettings(false);
-    }
-  };
-
   // Organizational Structure Handlers
   const openCreateOrgModal = () => {
     setEditingOrgMember(null);
@@ -1450,7 +1420,6 @@ export function CmsDashboard({
     { id: 'media', label: 'Kelola Media', icon: 'mdi:folder-open-outline' },
     { id: 'logos', label: 'Logo Mitra', icon: 'mdi:office-building-outline' },
     { id: 'org', label: 'Struktur Organisasi', icon: 'mdi:account-group-outline' },
-    { id: 'pages', label: 'Konten Halaman', icon: 'mdi:file-document-outline' },
     { id: 'inbox', label: 'Pesan & Buletin', icon: 'mdi:email-outline' },
     { id: 'security', label: 'Keamanan Akun', icon: 'mdi:lock-outline' },
   ];
@@ -2923,145 +2892,6 @@ export function CmsDashboard({
               </div>
             )}
           </div>
-        )}
-
-        {activeTab === 'pages' && (
-          <form
-            onSubmit={handleSaveSettings}
-            className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 p-6 sm:p-8 md:p-10 flex flex-col gap-6"
-          >
-            <div className="flex flex-col gap-1">
-              <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
-                Pengaturan Konten Dinamis
-              </span>
-              <h2 className="text-2xl font-normal text-[#164234]">
-                Hero, Tentang P2B & Lokasi
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-[#3E544B]">Judul Hero Beranda</label>
-                <input
-                  type="text"
-                  value={siteSettings.hero_title || ''}
-                  onChange={(e) =>
-                    setSiteSettings((s) => ({ ...s, hero_title: e.target.value }))
-                  }
-                  className="px-4 py-2.5 rounded-2xl bg-white/90 border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-[#3E544B]">URL Gambar Hero</label>
-                <input
-                  type="url"
-                  value={siteSettings.hero_image_url || ''}
-                  onChange={(e) =>
-                    setSiteSettings((s) => ({ ...s, hero_image_url: e.target.value }))
-                  }
-                  className="px-4 py-2.5 rounded-2xl bg-white/90 border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                />
-              </div>
-
-              <div className="md:col-span-2 flex flex-col gap-1.5">
-                <label className="text-xs text-[#3E544B]">Subjudul Hero Beranda</label>
-                <textarea
-                  rows={2}
-                  value={siteSettings.hero_subtitle || ''}
-                  onChange={(e) =>
-                    setSiteSettings((s) => ({ ...s, hero_subtitle: e.target.value }))
-                  }
-                  className="px-4 py-2.5 rounded-2xl bg-white/90 border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234] resize-none"
-                />
-              </div>
-
-              <div className="md:col-span-2 flex flex-col gap-1.5">
-                <label className="text-xs text-[#3E544B]">Judul Bagian Tentang P2B</label>
-                <input
-                  type="text"
-                  value={siteSettings.about_heading || ''}
-                  onChange={(e) =>
-                    setSiteSettings((s) => ({ ...s, about_heading: e.target.value }))
-                  }
-                  className="px-4 py-2.5 rounded-2xl bg-white/90 border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-[#3E544B]">Paragraf 1 Tentang P2B</label>
-                <textarea
-                  rows={4}
-                  value={siteSettings.about_p1 || ''}
-                  onChange={(e) =>
-                    setSiteSettings((s) => ({ ...s, about_p1: e.target.value }))
-                  }
-                  className="px-4 py-2.5 rounded-2xl bg-white/90 border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-[#3E544B]">Paragraf 2 Tentang P2B</label>
-                <textarea
-                  rows={4}
-                  value={siteSettings.about_p2 || ''}
-                  onChange={(e) =>
-                    setSiteSettings((s) => ({ ...s, about_p2: e.target.value }))
-                  }
-                  className="px-4 py-2.5 rounded-2xl bg-white/90 border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-[#3E544B]">Kontak Telepon / WhatsApp P2B</label>
-                <input
-                  type="text"
-                  value={siteSettings.contact_phone || ''}
-                  placeholder="0811-2520-4371"
-                  onChange={(e) =>
-                    setSiteSettings((s) => ({ ...s, contact_phone: e.target.value }))
-                  }
-                  className="px-4 py-2.5 rounded-2xl bg-white/90 border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-[#3E544B]">Email Resmi P2B</label>
-                <input
-                  type="email"
-                  value={siteSettings.contact_email || ''}
-                  placeholder="p2b@uinsalatiga.ac.id"
-                  onChange={(e) =>
-                    setSiteSettings((s) => ({ ...s, contact_email: e.target.value }))
-                  }
-                  className="px-4 py-2.5 rounded-2xl bg-white/90 border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                />
-              </div>
-
-              <div className="md:col-span-2 flex flex-col gap-1.5">
-                <label className="text-xs text-[#3E544B]">Alamat Kantor P2B (Peta Lokasi &amp; Kontak)</label>
-                <input
-                  type="text"
-                  value={siteSettings.location_address || ''}
-                  placeholder="P2B UIN Salatiga, Gedung Auditorium & Student Center Prof. Dr. H. Achmadi, Jl. Lingkar Selatan Km. 02, Pulutan, Sidorejo, Kota Salatiga, Jawa Tengah 50716."
-                  onChange={(e) =>
-                    setSiteSettings((s) => ({ ...s, location_address: e.target.value }))
-                  }
-                  className="px-4 py-2.5 rounded-2xl bg-white/90 border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={savingSettings}
-                className="px-6 py-3 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-sm transition-colors cursor-pointer"
-              >
-                {savingSettings ? 'Menyimpan...' : 'Simpan Perubahan Konten'}
-              </button>
-            </div>
-          </form>
         )}
 
         {activeTab === 'inbox' && (

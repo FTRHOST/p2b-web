@@ -96,9 +96,15 @@ export function AboutPage({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.15 }}
             transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-            className="rounded-[1.5rem] md:rounded-[3rem] bg-white/60 backdrop-blur-xl border border-[#C9A45A]/30 p-6 sm:p-10 md:p-14 flex flex-col gap-8"
+            className="group relative overflow-hidden rounded-[1.5rem] md:rounded-[3rem] bg-white/60 backdrop-blur-xl border border-[#C9A45A]/30 p-6 sm:p-10 md:p-14 flex flex-col gap-8"
           >
-            <div className="flex flex-col gap-2 max-w-4xl">
+            <CardCornerPattern
+              index={2}
+              position="top-right"
+              sizeClassName="w-48 h-48 sm:w-56 sm:h-56"
+              opacityClassName="opacity-[0.14] group-hover:opacity-[0.22]"
+            />
+            <div className="relative z-10 flex flex-col gap-2 max-w-4xl">
               <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
                 Profil Kelembagaan · PTN BLU
               </span>
@@ -108,7 +114,7 @@ export function AboutPage({
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10 text-sm sm:text-base md:text-[17px] text-[#3E544B] leading-relaxed">
+            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10 text-sm sm:text-base md:text-[17px] text-[#3E544B] leading-relaxed">
               <div className="flex flex-col gap-4">
                 <p>
                   {settings?.page_about_p1?.trim() ||

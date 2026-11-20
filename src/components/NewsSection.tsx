@@ -57,7 +57,7 @@ export function NewsSection({
               className="nup-cta"
             >
               <span className="nup-cta__label">
-                Lihat Semua Berita ({articles.length})
+                Lihat Semua Berita
               </span>
               <span className="nup-cta__icon" aria-hidden="true">
                 <Icon icon="mdi:arrow-right" className="w-full h-full" />

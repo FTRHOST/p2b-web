@@ -310,8 +310,8 @@ export function NewsDetailPage({
           </motion.article>
 
           {/* Related News */}
-          <section className="flex flex-col gap-6">
-            <div className="px-3 md:px-6 flex items-center justify-between gap-4">
+          <section className="relative overflow-hidden rounded-[1.5rem] md:rounded-[3rem] bg-white/60 backdrop-blur-xl border border-[#C9A45A]/30 p-6 sm:p-10 md:p-12 flex flex-col gap-6">
+            <div className="relative z-10 px-3 md:px-0 flex items-center justify-between gap-4">
               <div className="flex flex-col gap-1">
                 <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
                   Baca Juga
@@ -331,21 +331,30 @@ export function NewsDetailPage({
               </button>
             </div>
 
-            <ul className="nup-grid">
-              {relatedArticles.map((item, index) => (
-                <EditorialNewsCard
-                  key={item.id}
-                  article={item}
-                  index={index}
-                  imageFailed={Boolean(failedRelatedImages[item.id])}
-                  onImageError={(id) =>
-                    setFailedRelatedImages((prev) => ({ ...prev, [id]: true }))
-                  }
-                  onSelectArticle={onSelectArticle}
-                  headingAs="h3"
-                />
-              ))}
-            </ul>
+            <div className="relative z-10">
+              <ul className="nup-grid">
+                {relatedArticles.map((item, index) => (
+                  <EditorialNewsCard
+                    key={item.id}
+                    article={item}
+                    index={index}
+                    imageFailed={Boolean(failedRelatedImages[item.id])}
+                    onImageError={(id) =>
+                      setFailedRelatedImages((prev) => ({ ...prev, [id]: true }))
+                    }
+                    onSelectArticle={onSelectArticle}
+                    headingAs="h3"
+                  />
+                ))}
+              </ul>
+            </div>
+
+            <CardCornerPattern
+              index={getPatternSeed(`${article.id}-related`)}
+              position="bottom-right"
+              sizeClassName="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64"
+              opacityClassName="opacity-[0.12]"
+            />
           </section>
         </div>
       </main>
