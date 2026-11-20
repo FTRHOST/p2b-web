@@ -3,6 +3,7 @@ import { Icon } from '@iconify/react';
 import { motion, AnimatePresence } from 'motion/react';
 import { defaultNavItems } from '../data/defaultNav';
 import { CmsNavItem, SiteSettings } from '../types/cms';
+import { CardCornerPattern } from './CardCornerPattern';
 
 export type NavPageTarget =
   | 'home'
@@ -45,14 +46,7 @@ export function Navbar({
   const [headerVisible, setHeaderVisible] = useState(true);
   const lastScrollYRef = useRef(0);
 
-  const [activeModal, setActiveModal] = useState<'contact' | 'service' | null>(null);
-  const [selectedServiceTitle, setSelectedServiceTitle] = useState('');
-  const [selectedServiceDescription, setSelectedServiceDescription] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
-  const [contactMessage, setContactMessage] = useState('');
-  const [contactSubmitted, setContactSubmitted] = useState(false);
-  const [contactSubmitting, setContactSubmitting] = useState(false);
-  const [contactError, setContactError] = useState('');
+  const [activeModal, setActiveModal] = useState<'contact' | null>(null);
 
   const resolvedLogoUrl = settings?.header_logo_url?.trim() || DEFAULT_LOGO_URL;
   const resolvedBrandText = settings?.header_brand_text?.trim() || 'P2B UIN Salatiga';
@@ -118,14 +112,12 @@ export function Navbar({
   const isTargetCurrent = (item: CmsNavItem): boolean => {
     if (item.actionType !== 'page' && item.actionType !== 'url') return false;
     if (!item.target.trim().startsWith('/')) return false;
-    return normalizeTargetPath(item.target) === normalizeTargetPath(currentPath);
+    const normalized = normalizeTargetPath(item.target);
+    if (normalized === '/' && item.parentId !== null) return false;
+    return normalized === normalizeTargetPath(currentPath);
   };
 
   const handleOpenContact = () => {
-    setContactSubmitted(false);
-    setContactError('');
-    setContactEmail('');
-    setContactMessage('');
     setActiveModal('contact');
   };
 
@@ -139,12 +131,7 @@ export function Navbar({
     }
 
     if (item.actionType === 'modal_service') {
-      setSelectedServiceTitle(item.label);
-      setSelectedServiceDescription(
-        item.description?.trim() ||
-          `Layanan ${item.label} dikelola oleh Pusat Pengembangan Bisnis (P2B) UIN Salatiga dengan standar tata kelola PTN BLU yang transparan, profesional, dan berorientasi pada kepuasan pengguna.`
-      );
-      setActiveModal('service');
+      onNavigateTarget('/');
       return;
     }
 
@@ -166,35 +153,6 @@ export function Navbar({
       return;
     }
     onNavigateTarget(target);
-  };
-
-  const handleContactSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedEmail = contactEmail.trim();
-    if (!trimmedEmail) return;
-
-    setContactSubmitting(true);
-    setContactError('');
-    try {
-      const res = await fetch('/api/public/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: trimmedEmail,
-          message: contactMessage.trim(),
-        }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { message?: string };
-        setContactError(data.message || 'Gagal mengirim pesan. Silakan coba kembali.');
-        return;
-      }
-      setContactSubmitted(true);
-    } catch {
-      setContactError('Tidak dapat terhubung ke server. Silakan coba lagi.');
-    } finally {
-      setContactSubmitting(false);
-    }
   };
 
   const renderExternalLinkOrButton = (
@@ -516,31 +474,40 @@ export function Navbar({
               exit={{ opacity: 0, scale: 0.96, y: 10 }}
               transition={{ duration: 0.2 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg rounded-3xl bg-[#FAF8F3]/95 backdrop-blur-2xl border border-[#C9A45A]/30 p-6 md:p-8 text-[#164234] shadow-lg relative"
+              className="group relative overflow-hidden w-full max-w-lg rounded-3xl bg-[#FAF8F3]/95 backdrop-blur-2xl border border-[#C9A45A]/30 p-6 md:p-8 text-[#164234] shadow-lg"
             >
+              {activeModal === 'contact' && (
+                <CardCornerPattern
+                  index={0}
+                  position="bottom-right"
+                  sizeClassName="w-40 h-40 sm:w-44 sm:h-44"
+                  opacityClassName="opacity-[0.16] group-hover:opacity-[0.24]"
+                />
+              )}
+
               <button
                 type="button"
                 onClick={() => setActiveModal(null)}
                 aria-label="Tutup modal"
-                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[rgba(22,66,52,0.15)] flex items-center justify-center transition-colors cursor-pointer"
+                className="absolute top-5 right-5 z-20 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[rgba(22,66,52,0.15)] flex items-center justify-center transition-colors cursor-pointer"
               >
                 <Icon icon="mdi:close" className="w-4 h-4 text-[#164234]" />
               </button>
 
               {activeModal === 'contact' && (
-                <div>
+                <div className="relative z-10">
                   <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
                     {resolvedBrandText}
                   </span>
                   <h2 className="text-2xl font-normal tracking-tight mt-1 mb-2">
                     Hubungi Kami
                   </h2>
-                  <p className="text-sm text-[#3E544B] mb-4">
-                    Kirimkan pertanyaan terkait layanan sewa aset, Gedung Auditorium, Klinik Mitra Insani, kemitraan, maupun program magang mahasiswa.
+                  <p className="text-sm text-[#3E544B] mb-5">
+                    Informasi kontak resmi layanan sewa aset, Gedung Auditorium, Klinik Mitra Insani, kemitraan, maupun program magang mahasiswa.
                   </p>
 
                   {/* Official Institutional Contact Details */}
-                  <div className="mb-5 rounded-2xl bg-white/80 border border-[#C9A45A]/25 p-4 flex flex-col gap-2.5 text-xs sm:text-sm text-[#164234]">
+                  <div className="mb-6 rounded-2xl bg-white/80 border border-[#C9A45A]/25 p-4 flex flex-col gap-3 text-xs sm:text-sm text-[#164234]">
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                       <a
                         href={resolvedPhoneHref}
@@ -557,73 +524,13 @@ export function Navbar({
                         <span>{resolvedEmail}</span>
                       </a>
                     </div>
-                    <div className="flex items-start gap-2 text-xs text-[#3E544B] leading-relaxed pt-2 border-t border-[#C9A45A]/20">
+                    <div className="flex items-start gap-2 text-xs text-[#3E544B] leading-relaxed pt-2.5 border-t border-[#C9A45A]/20">
                       <Icon icon="mdi:map-marker-outline" className="w-4 h-4 text-[#8F6D26] shrink-0 mt-0.5" />
                       <span>{resolvedAddress}</span>
                     </div>
                   </div>
 
-                  {contactSubmitted ? (
-                    <div className="flex items-center gap-3 p-4 rounded-2xl bg-[rgba(22,66,52,0.06)] border border-[#C9A45A]/25 text-sm">
-                      <div className="w-8 h-8 rounded-full bg-[#164234] text-[#F4D993] flex items-center justify-center shrink-0">
-                        <Icon icon="mdi:check" className="w-4 h-4" />
-                      </div>
-                      <span>
-                        Pesan dari <strong>{contactEmail}</strong> telah diterima. Tim P2B UIN Salatiga akan segera menghubungi Anda.
-                      </span>
-                    </div>
-                  ) : (
-                    <form onSubmit={handleContactSubmit} className="flex flex-col gap-3">
-                      <input
-                        type="email"
-                        required
-                        value={contactEmail}
-                        onChange={(e) => setContactEmail(e.target.value)}
-                        placeholder="email@anda.com"
-                        className="w-full px-4 py-3 rounded-2xl bg-white/85 border border-[#C9A45A]/30 text-sm text-[#164234] placeholder:text-[#3E544B]/50 focus:outline-none focus:border-[#164234]"
-                      />
-                      <textarea
-                        rows={3}
-                        value={contactMessage}
-                        onChange={(e) => setContactMessage(e.target.value)}
-                        placeholder="Tulis kebutuhan layanan atau proposal kemitraan Anda..."
-                        className="w-full px-4 py-3 rounded-2xl bg-white/85 border border-[#C9A45A]/30 text-sm text-[#164234] placeholder:text-[#3E544B]/50 focus:outline-none focus:border-[#164234] resize-none"
-                      />
-                      {contactError && (
-                        <p className="text-xs text-[#9b2c2c]">{contactError}</p>
-                      )}
-                      <button
-                        type="submit"
-                        disabled={contactSubmitting}
-                        className="w-full py-3 rounded-full bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors cursor-pointer"
-                      >
-                        {contactSubmitting ? 'Mengirim...' : 'Kirim Pesan'}
-                      </button>
-                    </form>
-                  )}
-                </div>
-              )}
-
-              {activeModal === 'service' && (
-                <div>
-                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
-                    Layanan {resolvedBrandText}
-                  </span>
-                  <h2 className="text-2xl font-normal tracking-tight mt-1 mb-2">
-                    {selectedServiceTitle}
-                  </h2>
-                  <p className="text-sm text-[#3E544B] leading-relaxed mb-6">
-                    {selectedServiceDescription}
-                  </p>
-
-                  <div className="flex items-center justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setActiveModal('contact')}
-                      className="px-5 py-2.5 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[rgba(22,66,52,0.14)] text-[#164234] text-sm font-normal transition-colors cursor-pointer"
-                    >
-                      Hubungi Tim P2B
-                    </button>
+                  <div className="flex items-center justify-end">
                     <button
                       type="button"
                       onClick={() => setActiveModal(null)}

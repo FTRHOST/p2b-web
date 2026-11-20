@@ -125,7 +125,7 @@ export function CmsLoginPage({ onLoginSuccess, onBackHome }: CmsLoginPageProps) 
                 Masuk Pengelola Konten
               </h1>
               <p className="text-xs sm:text-sm text-[#3E544B] leading-relaxed">
-                Kelola berita, konten beranda, tanggapan pembaca, serta pesan masuk layanan P2B.
+                Kelola berita, media, logo mitra, serta struktur organisasi P2B UIN Salatiga.
               </p>
             </div>
 

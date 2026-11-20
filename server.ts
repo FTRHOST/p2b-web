@@ -411,23 +411,8 @@ async function ensureDatabaseReady(): Promise<void> {
       'ALTER TABLE cms_media ADD COLUMN IF NOT EXISTS alt_text VARCHAR(255) NULL AFTER original_name'
     );
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS cms_contact_messages (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        email VARCHAR(160) NOT NULL,
-        message TEXT NOT NULL,
-        status VARCHAR(32) NOT NULL DEFAULT 'baru',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS cms_newsletter_subscribers (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        email VARCHAR(160) NOT NULL UNIQUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
+    await pool.query('DROP TABLE IF EXISTS cms_contact_messages');
+    await pool.query('DROP TABLE IF EXISTS cms_newsletter_subscribers');
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cms_org_members (
@@ -1220,51 +1205,6 @@ async function startServer() {
     }
   });
 
-  // Submit public contact form
-  app.post('/api/public/contact', async (req: Request, res: Response) => {
-    const { email, message } = req.body as { email?: string; message?: string };
-    if (!email?.trim()) {
-      res.status(400).json({ ok: false, message: 'Email wajib diisi.' });
-      return;
-    }
-
-    try {
-      await pool.query(
-        'INSERT INTO cms_contact_messages (email, message, status) VALUES (?, ?, ?)',
-        [email.trim().slice(0, 160), (message || '').trim(), 'baru']
-      );
-      res.status(201).json({ ok: true });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal mengirim pesan.',
-      });
-    }
-  });
-
-  // Subscribe to newsletter
-  app.post('/api/public/newsletter', async (req: Request, res: Response) => {
-    const { email } = req.body as { email?: string };
-    const trimmed = (email || '').trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      res.status(400).json({ ok: false, message: 'Format email tidak valid.' });
-      return;
-    }
-
-    try {
-      await pool.query(
-        'INSERT IGNORE INTO cms_newsletter_subscribers (email) VALUES (?)',
-        [trimmed.slice(0, 160)]
-      );
-      res.status(201).json({ ok: true });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal mendaftarkan email.',
-      });
-    }
-  });
-
   // CMS Authentication
   app.post('/api/cms/login', async (req: Request, res: Response) => {
     if (!dbReady) {
@@ -1422,21 +1362,12 @@ async function startServer() {
       const [[newsCount]] = await pool.query<RowDataPacket[]>(
         'SELECT COUNT(*) AS total, SUM(CASE WHEN is_published = 1 THEN 1 ELSE 0 END) AS published FROM cms_news'
       );
-      const [[msgCount]] = await pool.query<RowDataPacket[]>(
-        "SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'baru' THEN 1 ELSE 0 END) AS unread FROM cms_contact_messages"
-      );
-      const [[subCount]] = await pool.query<RowDataPacket[]>(
-        'SELECT COUNT(*) AS total FROM cms_newsletter_subscribers'
-      );
 
       res.json({
         ok: true,
         stats: {
           totalNews: Number(newsCount?.total || 0),
           publishedNews: Number(newsCount?.published || 0),
-          totalMessages: Number(msgCount?.total || 0),
-          unreadMessages: Number(msgCount?.unread || 0),
-          totalSubscribers: Number(subCount?.total || 0),
         },
       });
     } catch (err) {
@@ -2539,68 +2470,6 @@ async function startServer() {
       res.status(500).json({
         ok: false,
         message: err instanceof Error ? err.message : 'Gagal menghapus logo mitra.',
-      });
-    }
-  });
-
-  // CMS Contact Inbox & Newsletter Subscribers
-  app.get('/api/cms/inbox', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
-    try {
-      const [messages] = await pool.query<RowDataPacket[]>(
-        'SELECT * FROM cms_contact_messages ORDER BY id DESC'
-      );
-      const [subscribers] = await pool.query<RowDataPacket[]>(
-        'SELECT * FROM cms_newsletter_subscribers ORDER BY id DESC'
-      );
-      res.json({
-        ok: true,
-        messages: messages.map((m) => ({
-          id: Number(m.id),
-          email: String(m.email),
-          message: String(m.message),
-          status: String(m.status),
-          createdAt: String(m.created_at),
-        })),
-        subscribers: subscribers.map((s) => ({
-          id: Number(s.id),
-          email: String(s.email),
-          createdAt: String(s.created_at),
-        })),
-      });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal memuat kotak masuk.',
-      });
-    }
-  });
-
-  app.patch('/api/cms/inbox/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
-    const id = Number(req.params.id);
-    const { status } = req.body as { status?: string };
-    try {
-      await pool.query('UPDATE cms_contact_messages SET status = ? WHERE id = ?', [
-        status || 'dibaca',
-        id,
-      ]);
-      res.json({ ok: true });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal memperbarui status pesan.',
-      });
-    }
-  });
-
-  app.delete('/api/cms/inbox/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
-    const id = Number(req.params.id);
-    try {
-      await pool.query('DELETE FROM cms_contact_messages WHERE id = ?', [id]);
-      res.json({ ok: true });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal menghapus pesan.',
       });
     }
   });

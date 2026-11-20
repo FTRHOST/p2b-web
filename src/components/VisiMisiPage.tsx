@@ -45,25 +45,6 @@ const misiStrategis = [
   },
 ];
 
-const tataKelolaPillars = [
-  {
-    title: 'Transparan',
-    detail: 'Prosedur, tarif layanan, dan kerja sama bisnis terpublikasi jelas.',
-  },
-  {
-    title: 'Akuntabel',
-    detail: 'Pelaporan kinerja unit usaha sesuai regulasi keuangan PTN BLU.',
-  },
-  {
-    title: 'Profesional',
-    detail: 'Standar layanan modern yang berfokus pada mutu dan ketepatan.',
-  },
-  {
-    title: 'Berkelanjutan',
-    detail: 'Penguatan kemandirian universitas jangka panjang bagi masyarakat.',
-  },
-];
-
 export function VisiMisiPage({
   settings,
   onOpenStruktur,
@@ -169,38 +150,6 @@ export function VisiMisiPage({
                   </h3>
                   <p className="relative z-10 text-sm md:text-base text-[#3E544B] leading-relaxed">
                     {misi.description}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </motion.section>
-
-          {/* Tata Kelola Strip */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-            className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/55 backdrop-blur-xl border border-[#C9A45A]/30 p-6 sm:p-8 md:p-10 flex flex-col gap-6"
-          >
-            <div className="flex items-center gap-2.5 text-[#164234]">
-              <Icon icon="mdi:layers-outline" className="w-5 h-5 text-[#8F6D26]" />
-              <h2 className="text-xl sm:text-2xl font-normal tracking-tight">
-                Komitmen Tata Kelola PTN BLU
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {tataKelolaPillars.map((pillar) => (
-                <div
-                  key={pillar.title}
-                  className="rounded-2xl bg-[#F6F3EC]/80 border border-[#C9A45A]/25 p-5 flex flex-col gap-1.5"
-                >
-                  <span className="text-base font-normal text-[#164234]">
-                    {pillar.title}
-                  </span>
-                  <p className="text-xs sm:text-sm text-[#3E544B] leading-relaxed">
-                    {pillar.detail}
                   </p>
                 </div>
               ))}

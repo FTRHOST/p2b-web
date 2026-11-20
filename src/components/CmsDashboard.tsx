@@ -2,11 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '@iconify/react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  CmsContactMessage,
   CmsDatabaseInfo,
   CmsMediaItem,
   CmsNewsItem,
-  CmsNewsletterSubscriber,
   CmsStats,
   CmsUploadedMedia,
   CmsUser,
@@ -76,7 +74,6 @@ type CmsTab =
   | 'media'
   | 'logos'
   | 'org'
-  | 'inbox'
   | 'security';
 
 interface CmsDashboardProps {
@@ -105,8 +102,6 @@ export function CmsDashboard({
   const [mediaItems, setMediaItems] = useState<CmsMediaItem[]>([]);
   const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'pdf'>('all');
   const [mediaSearch, setMediaSearch] = useState('');
-  const [messages, setMessages] = useState<CmsContactMessage[]>([]);
-  const [subscribers, setSubscribers] = useState<CmsNewsletterSubscriber[]>([]);
   const [bannerNotice, setBannerNotice] = useState('');
 
   // Media Management & Export/Import State
@@ -229,14 +224,13 @@ export function CmsDashboard({
 
   const loadAllCmsData = useCallback(async () => {
     try {
-      const [ovRes, newsRes, catRes, mediaRes, orgRes, logoRes, inbRes] = await Promise.all([
+      const [ovRes, newsRes, catRes, mediaRes, orgRes, logoRes] = await Promise.all([
         fetch('/api/cms/overview', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/news', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/categories', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/media', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/org-members', { headers: authHeaders(), credentials: 'include' }),
         fetch('/api/cms/partner-logos', { headers: authHeaders(), credentials: 'include' }),
-        fetch('/api/cms/inbox', { headers: authHeaders(), credentials: 'include' }),
       ]);
 
       if (ovRes.ok) {
@@ -268,14 +262,6 @@ export function CmsDashboard({
           setPartnerLogos(d.items);
           setLogoOrderDirty(false);
         }
-      }
-      if (inbRes.ok) {
-        const d = (await inbRes.json()) as {
-          messages?: CmsContactMessage[];
-          subscribers?: CmsNewsletterSubscriber[];
-        };
-        if (d.messages) setMessages(d.messages);
-        if (d.subscribers) setSubscribers(d.subscribers);
       }
     } catch {
       // Keep current state if transient network error
@@ -1316,30 +1302,6 @@ export function CmsDashboard({
     }
   };
 
-  const handleMarkMessageRead = async (id: number) => {
-    const res = await fetch(`/api/cms/inbox/${id}`, {
-      method: 'PATCH',
-      headers: authHeaders(),
-      credentials: 'include',
-      body: JSON.stringify({ status: 'dibaca' }),
-    });
-    if (res.ok) {
-      await loadAllCmsData();
-    }
-  };
-
-  const handleDeleteMessage = async (id: number) => {
-    const res = await fetch(`/api/cms/inbox/${id}`, {
-      method: 'DELETE',
-      headers: authHeaders(),
-      credentials: 'include',
-    });
-    if (res.ok) {
-      await loadAllCmsData();
-      notify('Pesan dihapus dari kotak masuk.');
-    }
-  };
-
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
@@ -1420,7 +1382,6 @@ export function CmsDashboard({
     { id: 'media', label: 'Kelola Media', icon: 'mdi:folder-open-outline' },
     { id: 'logos', label: 'Logo Mitra', icon: 'mdi:office-building-outline' },
     { id: 'org', label: 'Struktur Organisasi', icon: 'mdi:account-group-outline' },
-    { id: 'inbox', label: 'Pesan & Buletin', icon: 'mdi:email-outline' },
     { id: 'security', label: 'Keamanan Akun', icon: 'mdi:lock-outline' },
   ];
 
@@ -1982,7 +1943,7 @@ export function CmsDashboard({
             {/* Tab Views */}
             {activeTab === 'overview' && (
               <div className="flex flex-col gap-6">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5">
                   <div className="rounded-[1.5rem] bg-white/70 backdrop-blur-xl border border-[#C9A45A]/30 p-6 flex flex-col gap-2">
                     <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
                       Total Berita
@@ -1998,25 +1959,13 @@ export function CmsDashboard({
 
                   <div className="rounded-[1.5rem] bg-white/70 backdrop-blur-xl border border-[#C9A45A]/30 p-6 flex flex-col gap-2">
                     <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
-                      Pesan Masuk Kontak
+                      Media & Dokumen
                     </span>
                     <span className="text-3xl font-normal tabular-nums text-[#164234]">
-                      {stats?.totalMessages ?? messages.length}
+                      {mediaItems.length}
                     </span>
                     <span className="text-xs text-[#3E544B]">
-                      {stats?.unreadMessages ?? 0} pesan belum dibaca
-                    </span>
-                  </div>
-
-                  <div className="rounded-[1.5rem] bg-white/70 backdrop-blur-xl border border-[#C9A45A]/30 p-6 flex flex-col gap-2">
-                    <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
-                      Pelanggan Buletin
-                    </span>
-                    <span className="text-3xl font-normal tabular-nums text-[#164234]">
-                      {stats?.totalSubscribers ?? subscribers.length}
-                    </span>
-                    <span className="text-xs text-[#3E544B]">
-                      Terdaftar via form footer
+                      {mediaItems.filter((m) => m.mimeType === 'application/pdf').length} file PDF tersimpan
                     </span>
                   </div>
                 </div>
@@ -2891,82 +2840,6 @@ export function CmsDashboard({
                 })}
               </div>
             )}
-          </div>
-        )}
-
-        {activeTab === 'inbox' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-7 rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 p-6 sm:p-8 flex flex-col gap-4">
-              <h2 className="text-xl sm:text-2xl font-normal text-[#164234]">
-                Pesan Formulir Kontak ({messages.length})
-              </h2>
-              {messages.length === 0 ? (
-                <p className="text-sm text-[#3E544B]">
-                  Belum ada pesan pengunjung yang masuk melalui tombol Kontak.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {messages.map((m) => (
-                    <div
-                      key={m.id}
-                      className="rounded-2xl bg-white/85 border border-[#C9A45A]/25 p-4 flex flex-col gap-2"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium text-[#164234]">
-                          {m.email}
-                        </span>
-                        <span className="text-xs text-[#8F6D26]">
-                          {m.status === 'baru' ? 'Baru' : 'Dibaca'}
-                        </span>
-                      </div>
-                      <p className="text-sm text-[#3E544B]">
-                        {m.message || '(Tidak ada isi pesan tambahan)'}
-                      </p>
-                      <div className="flex items-center gap-2 pt-1">
-                        {m.status === 'baru' && (
-                          <button
-                            type="button"
-                            onClick={() => void handleMarkMessageRead(m.id)}
-                            className="px-3 py-1.5 rounded-xl bg-[rgba(22,66,52,0.08)] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] text-xs transition-colors cursor-pointer"
-                          >
-                            Tandai Dibaca
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteMessage(m.id)}
-                          className="px-3 py-1.5 rounded-xl bg-[#9b2c2c]/10 hover:bg-[#9b2c2c] text-[#9b2c2c] hover:text-white text-xs transition-colors cursor-pointer"
-                        >
-                          Hapus
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="lg:col-span-5 rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 p-6 sm:p-8 flex flex-col gap-4">
-              <h2 className="text-xl sm:text-2xl font-normal text-[#164234]">
-                Pelanggan Buletin ({subscribers.length})
-              </h2>
-              {subscribers.length === 0 ? (
-                <p className="text-sm text-[#3E544B]">
-                  Belum ada email terdaftar di buletin.
-                </p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {subscribers.map((s) => (
-                    <li
-                      key={s.id}
-                      className="px-4 py-3 rounded-2xl bg-white/85 border border-[#C9A45A]/20 text-sm text-[#164234]"
-                    >
-                      {s.email}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </div>
         )}
 

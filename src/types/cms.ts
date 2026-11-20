@@ -50,23 +50,6 @@ export interface CmsNewsItem extends NewsArticle {
 export interface CmsStats {
   totalNews: number;
   publishedNews: number;
-  totalMessages: number;
-  unreadMessages: number;
-  totalSubscribers: number;
-}
-
-export interface CmsContactMessage {
-  id: number;
-  email: string;
-  message: string;
-  status: string;
-  createdAt: string;
-}
-
-export interface CmsNewsletterSubscriber {
-  id: number;
-  email: string;
-  createdAt: string;
 }
 
 export interface CmsUploadedMedia {

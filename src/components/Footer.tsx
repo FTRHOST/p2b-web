@@ -54,7 +54,7 @@ const legalDocs: Record<string, LegalDoc> = {
     sections: [
       {
         heading: '1. Penggunaan Data Pemohon',
-        body: 'Informasi kontak yang dikirimkan melalui formulir kontak hanya digunakan untuk koordinasi layanan dan informasi resmi P2B UIN Salatiga.',
+        body: 'Informasi kontak dan korespondensi resmi hanya digunakan untuk koordinasi layanan dan informasi resmi P2B UIN Salatiga.',
       },
       {
         heading: '2. Kerahasiaan Dokumen Kemitraan',
@@ -147,10 +147,6 @@ interface FooterProps {
 
 export function Footer({ settings, onNavigate }: FooterProps) {
   const [activeLegal, setActiveLegal] = useState<LegalDoc | null>(null);
-  const [activeService, setActiveService] = useState<{
-    label: string;
-    description: string;
-  } | null>(null);
   const [logoFailed, setLogoFailed] = useState(false);
 
   const resolvedLogoUrl = settings?.header_logo_url?.trim() || DEFAULT_HEADER_LOGO_URL;
@@ -211,13 +207,19 @@ export function Footer({ settings, onNavigate }: FooterProps) {
               <ul className="mt-2 flex flex-col gap-2 text-base font-medium leading-6 text-white/75">
                 {serviceItems.map((service) => (
                   <li key={service.label}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveService(service)}
-                      className="text-left hover:text-white transition-colors cursor-pointer bg-transparent border-0 p-0"
+                    <a
+                      href="/"
+                      onClick={(e) => {
+                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+                          return;
+                        }
+                        e.preventDefault();
+                        navigateSection('top');
+                      }}
+                      className="hover:text-white transition-colors"
                     >
                       {service.label}
-                    </button>
+                    </a>
                   </li>
                 ))}
               </ul>
@@ -473,53 +475,6 @@ export function Footer({ settings, onNavigate }: FooterProps) {
           </div>
         </div>
       </div>
-
-      {/* Service Info Modal */}
-      <AnimatePresence>
-        {activeService && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setActiveService(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/45 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 10 }}
-              transition={{ duration: 0.2 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-3xl bg-[#FAF8F3] border border-[#C9A45A]/30 p-6 md:p-8 text-[#164234] shadow-lg relative"
-            >
-              <button
-                type="button"
-                onClick={() => setActiveService(null)}
-                aria-label="Tutup detail layanan"
-                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[rgba(22,66,52,0.15)] flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <Icon icon="mdi:close" className="w-4 h-4 text-[#164234]" />
-              </button>
-
-              <span className="text-xs text-[#8F6D26]">Unit Layanan P2B UIN Salatiga</span>
-              <h3 className="text-2xl font-normal tracking-tight mt-1 mb-3">
-                {activeService.label}
-              </h3>
-              <p className="text-sm text-[#3E544B] leading-relaxed mb-6">
-                {activeService.description}
-              </p>
-
-              <button
-                type="button"
-                onClick={() => setActiveService(null)}
-                className="w-full py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors cursor-pointer"
-              >
-                Tutup
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Legal Documentation Modal */}
       <AnimatePresence>
