@@ -15,33 +15,33 @@ interface VisiMisiPageProps {
 const misiStrategis = [
   {
     number: '01',
-    title: 'Optimalisasi Aset Universitas',
+    title: 'Tata Kelola Bisnis Profesional',
     description:
-      'Mengelola dan mengembangkan pemanfaatan aset universitas agar memiliki nilai ekonomi dan manfaat yang lebih besar, meliputi fasilitas, ruang, sarana pendukung kegiatan, serta potensi aset strategis lainnya.',
+      'Mengembangkan tata kelola bisnis universitas yang profesional, transparan, dan akuntabel.',
   },
   {
     number: '02',
-    title: 'Pengembangan Layanan Komersial',
+    title: 'Optimalisasi Aset & Potensi',
     description:
-      'Menghadirkan layanan komersial berbasis kebutuhan pengguna dengan mengutamakan mutu pelayanan, profesionalitas SDM, transparansi tarif, dan kepuasan pelanggan.',
+      'Mengoptimalkan aset dan potensi universitas menjadi layanan dan produk bernilai tambah.',
   },
   {
     number: '03',
-    title: 'Pengembangan Unit Bisnis',
+    title: 'Inovasi Bisnis & Layanan',
     description:
-      'Melakukan identifikasi peluang, kajian kelayakan, perintisan, serta evaluasi unit bisnis baru universitas berdasarkan prinsip tata kelola bisnis yang baik dan akuntabel.',
+      'Mengembangkan inovasi bisnis dan layanan berbasis kebutuhan masyarakat.',
   },
   {
     number: '04',
-    title: 'Pengembangan Kemitraan Strategis',
+    title: 'Kemitraan Strategis',
     description:
-      'Membuka peluang kerja sama produktif bersama dunia industri, pemerintah, alumni, masyarakat, dan sivitas akademika untuk menciptakan kolaborasi yang memberikan manfaat bersama.',
+      'Membangun kemitraan strategis dengan berbagai pihak.',
   },
   {
     number: '05',
-    title: 'Pengembangan Talenta & Inovasi Mahasiswa',
+    title: 'Kewirausahaan & Kompetensi Mahasiswa',
     description:
-      'Menjadi ruang pembelajaran praktik melalui keterlibatan mahasiswa dalam kegiatan bisnis universitas, program magang profesional, serta pengembangan kompetensi IT, komunikasi, pemasaran digital, bisnis, dan akuntansi.',
+      'Mendukung pengembangan budaya kewirausahaan dan kompetensi profesional mahasiswa.',
   },
 ];
 
@@ -91,13 +91,13 @@ export function VisiMisiPage({
                 <Icon icon="mdi:compass-outline" className="w-5 h-5 text-[#F4D993]" />
               </div>
               <span className="text-xs md:text-sm uppercase tracking-[0.16em] text-[#F4D993]">
-                {settings?.page_visimisi_visi_label?.trim() || 'Visi Utama P2B'}
+                {settings?.page_visimisi_visi_label?.trim() || 'Visi P2B'}
               </span>
             </div>
 
             <h2 className="relative z-10 text-2xl sm:text-3xl md:text-4xl lg:text-[42px] font-normal tracking-tight leading-[1.2] max-w-5xl text-balance">
               {settings?.page_visimisi_visi_text?.trim() ||
-                'Menjadi pusat pengembangan bisnis perguruan tinggi yang mandiri, inovatif, akuntabel, serta mampu menciptakan nilai tambah berkelanjutan bagi UIN Salatiga, sivitas akademika, dan masyarakat.'}
+                'Menjadi pusat pengembangan bisnis universitas yang profesional, inovatif, dan berkelanjutan dalam mendukung kemandirian serta peningkatan nilai tambah kelembagaan UIN Salatiga.'}
             </h2>
 
             <p className="relative z-10 text-sm sm:text-base text-[#F6F3EC]/85 max-w-3xl leading-relaxed">
@@ -118,10 +118,10 @@ export function VisiMisiPage({
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs uppercase tracking-wider text-[#8F6D26] inline-flex items-center gap-1.5">
                   <Icon icon="mdi:target" className="w-3.5 h-3.5" />
-                  <span>Misi Strategis</span>
+                  <span>Misi P2B</span>
                 </span>
                 <h2 className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight">
-                  Lima Fokus Pengembangan Bisnis
+                  Lima Fokus Misi Pengembangan Bisnis
                 </h2>
               </div>
 
