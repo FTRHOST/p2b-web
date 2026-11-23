@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import fs from 'fs';
+import http from 'http';
 import path from 'path';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
@@ -8,6 +9,7 @@ import mysql from 'mysql2/promise';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
+import { WebSocketServer, WebSocket } from 'ws';
 
 const PORT = Number(process.env.PORT || 3000);
 const DB_NAME = process.env.DB_NAME || 'p2b';
@@ -451,6 +453,14 @@ async function ensureDatabaseReady(): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cms_site_settings (
+        setting_key VARCHAR(100) PRIMARY KEY,
+        setting_value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
     // Seed initial admin user if empty
     const [userCountRows] = await pool.query<RowDataPacket[]>(
       'SELECT COUNT(*) AS total FROM cms_users'
@@ -731,10 +741,165 @@ function formatDateIndonesian(dateInput: Date): string {
   return `${day} ${month} ${year}`;
 }
 
+let cmsRevision = 1;
+let lastMutationAt = new Date().toISOString();
+const realtimeClients = new Set<WebSocket>();
+
+async function fetchSiteSettingsMap(): Promise<Record<string, string>> {
+  if (!dbReady) return {};
+  try {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT setting_key, setting_value FROM cms_site_settings'
+    );
+    const result: Record<string, string> = {};
+    for (const row of rows) {
+      const key = String(row.setting_key || '').trim();
+      if (key) {
+        result[key] = String(row.setting_value ?? '');
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+async function getPublicDataVersion(): Promise<{
+  version: string;
+  revision: number;
+  updatedAt: string;
+}> {
+  if (!dbReady) {
+    return {
+      version: `mem-${cmsRevision}`,
+      revision: cmsRevision,
+      updatedAt: lastMutationAt,
+    };
+  }
+  try {
+    const [rows] = await pool.query<RowDataPacket[]>(`
+      SELECT
+        (SELECT COUNT(*) FROM cms_news) AS news_count,
+        (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_news) AS news_ts,
+        (SELECT COUNT(*) FROM cms_news_categories) AS cat_count,
+        (SELECT COALESCE(MAX(created_at), '1970-01-01') FROM cms_news_categories) AS cat_ts,
+        (SELECT COUNT(*) FROM cms_org_members) AS org_count,
+        (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_org_members) AS org_ts,
+        (SELECT COUNT(*) FROM cms_partner_logos) AS logo_count,
+        (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_partner_logos) AS logo_ts,
+        (SELECT COUNT(*) FROM cms_site_settings) AS settings_count,
+        (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_site_settings) AS settings_ts,
+        (SELECT COUNT(*) FROM cms_media) AS media_count
+    `);
+    const r = rows[0] || {};
+    const signature = [
+      r.news_count,
+      r.news_ts,
+      r.cat_count,
+      r.cat_ts,
+      r.org_count,
+      r.org_ts,
+      r.logo_count,
+      r.logo_ts,
+      r.settings_count,
+      r.settings_ts,
+      r.media_count,
+    ].join('|');
+    const hash = crypto.createHash('sha1').update(signature).digest('hex').slice(0, 12);
+    return {
+      version: `${cmsRevision}-${hash}`,
+      revision: cmsRevision,
+      updatedAt: lastMutationAt,
+    };
+  } catch {
+    return {
+      version: `rev-${cmsRevision}`,
+      revision: cmsRevision,
+      updatedAt: lastMutationAt,
+    };
+  }
+}
+
+async function notifyCmsDataCommitted(
+  domain: 'news' | 'categories' | 'org' | 'logos' | 'media' | 'settings',
+  action: string,
+  entityId?: string | number
+): Promise<void> {
+  cmsRevision += 1;
+  lastMutationAt = new Date().toISOString();
+  const versionInfo = await getPublicDataVersion();
+  const payload = JSON.stringify({
+    type: 'cms:committed',
+    domain,
+    action,
+    entityId: entityId ?? null,
+    version: versionInfo.version,
+    revision: versionInfo.revision,
+    timestamp: versionInfo.updatedAt,
+  });
+
+  for (const client of realtimeClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
+    }
+  }
+}
+
 async function startServer() {
   await ensureDatabaseReady();
 
   const app = express();
+  const server = http.createServer(app);
+  const wss = new WebSocketServer({ server, path: '/ws/realtime' });
+
+  const heartbeatInterval = setInterval(() => {
+    for (const client of realtimeClients) {
+      const tracked = client as WebSocket & { isAlive?: boolean };
+      if (tracked.isAlive === false) {
+        realtimeClients.delete(client);
+        client.terminate();
+        continue;
+      }
+      tracked.isAlive = false;
+      client.ping();
+    }
+  }, 25000);
+
+  wss.on('close', () => {
+    clearInterval(heartbeatInterval);
+  });
+
+  wss.on('connection', (ws) => {
+    const tracked = ws as WebSocket & { isAlive?: boolean };
+    tracked.isAlive = true;
+    realtimeClients.add(ws);
+
+    ws.on('pong', () => {
+      tracked.isAlive = true;
+    });
+
+    ws.on('close', () => {
+      realtimeClients.delete(ws);
+    });
+
+    ws.on('error', () => {
+      realtimeClients.delete(ws);
+    });
+
+    void getPublicDataVersion().then((versionInfo) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            type: 'realtime:connected',
+            version: versionInfo.version,
+            revision: versionInfo.revision,
+            timestamp: versionInfo.updatedAt,
+          })
+        );
+      }
+    });
+  });
+
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '50mb' }));
 
@@ -839,6 +1004,7 @@ async function startServer() {
           'INSERT INTO cms_media (id, original_name, alt_text, mime_type, size_bytes, data) VALUES (?, ?, ?, ?, ?, ?)',
           [id, cleanName, altText || null, file.mimetype, file.size, file.buffer]
         );
+        await notifyCmsDataCommitted('media', 'uploaded', id);
 
         res.status(201).json({
           ok: true,
@@ -1025,6 +1191,9 @@ async function startServer() {
         importedCount++;
       }
 
+      if (importedCount > 0) {
+        await notifyCmsDataCommitted('media', 'imported');
+      }
       res.json({ ok: true, importedCount, skippedCount });
     } catch (err) {
       res.status(500).json({
@@ -1102,6 +1271,7 @@ async function startServer() {
           [mediaId]
         );
         const updated = updatedRows[0];
+        await notifyCmsDataCommitted('media', 'updated', mediaId);
         res.json({
           ok: true,
           item: {
@@ -1149,6 +1319,7 @@ async function startServer() {
     }
     try {
       await pool.query('DELETE FROM cms_media WHERE id = ?', [mediaId]);
+      await notifyCmsDataCommitted('media', 'deleted', mediaId);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({
@@ -1156,6 +1327,20 @@ async function startServer() {
         message: err instanceof Error ? err.message : 'Gagal menghapus media.',
       });
     }
+  });
+
+  // Lightweight public version endpoint for polling & reconnect reconciliation
+  app.get('/api/public/version', async (_req: Request, res: Response) => {
+    if (!dbReady) {
+      await ensureDatabaseReady();
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    const versionInfo = await getPublicDataVersion();
+    res.json({
+      ok: true,
+      dbReady,
+      ...versionInfo,
+    });
   });
 
   // Public bootstrap (news + site settings)
@@ -1172,6 +1357,7 @@ async function startServer() {
     }
 
     try {
+      res.setHeader('Cache-Control', 'no-store');
       const [newsRows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_news WHERE is_published = 1 ORDER BY sort_order ASC, id DESC'
       );
@@ -1184,11 +1370,17 @@ async function startServer() {
       const [logoRows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_partner_logos WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
       );
+      const [settings, versionInfo] = await Promise.all([
+        fetchSiteSettingsMap(),
+        getPublicDataVersion(),
+      ]);
 
       res.json({
         ok: true,
+        version: versionInfo.version,
+        revision: versionInfo.revision,
         news: newsRows.map(mapNewsRow),
-        settings: {},
+        settings,
         orgMembers: orgRows.map(mapOrgMemberRow),
         partnerLogos: logoRows.map(mapPartnerLogoRow),
         categories: categoryRows.map((c) => ({
@@ -1654,6 +1846,9 @@ async function startServer() {
         importedNews++;
       }
 
+      if (importedNews > 0 || importedMedia > 0) {
+        await notifyCmsDataCommitted('news', 'imported');
+      }
       res.json({ ok: true, importedNews, skippedNews, importedMedia });
     } catch (err) {
       res.status(500).json({
@@ -1766,6 +1961,7 @@ async function startServer() {
         'SELECT * FROM cms_news WHERE id = ? LIMIT 1',
         [result.insertId]
       );
+      await notifyCmsDataCommitted('news', 'created', result.insertId);
       res.status(201).json({ ok: true, item: mapNewsRow(inserted[0]) });
     } catch (err) {
       res.status(500).json({
@@ -1879,6 +2075,7 @@ async function startServer() {
         res.status(404).json({ ok: false, message: 'Berita tidak ditemukan.' });
         return;
       }
+      await notifyCmsDataCommitted('news', 'updated', dbId);
       res.json({ ok: true, item: mapNewsRow(updated[0]) });
     } catch (err) {
       res.status(500).json({
@@ -1911,6 +2108,7 @@ async function startServer() {
         `DELETE FROM cms_news WHERE id IN (${placeholders})`,
         cleanIds
       );
+      await notifyCmsDataCommitted('news', 'bulk-deleted');
       res.json({ ok: true, deletedCount: result.affectedRows || 0 });
     } catch (err) {
       res.status(500).json({
@@ -1928,6 +2126,7 @@ async function startServer() {
     }
     try {
       await pool.query('DELETE FROM cms_news WHERE id = ?', [dbId]);
+      await notifyCmsDataCommitted('news', 'deleted', dbId);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({
@@ -1995,6 +2194,7 @@ async function startServer() {
         'INSERT INTO cms_news_categories (name, sort_order) VALUES (?, ?)',
         [cleanName, nextOrder]
       );
+      await notifyCmsDataCommitted('categories', 'created', result.insertId);
       res.status(201).json({
         ok: true,
         item: {
@@ -2053,6 +2253,7 @@ async function startServer() {
       if (oldName !== cleanName) {
         await pool.query('UPDATE cms_news SET category = ? WHERE category = ?', [cleanName, oldName]);
       }
+      await notifyCmsDataCommitted('categories', 'updated', catId);
 
       res.json({
         ok: true,
@@ -2103,6 +2304,7 @@ async function startServer() {
         [fallbackName, String(target.name)]
       );
       await pool.query('DELETE FROM cms_news_categories WHERE id = ?', [catId]);
+      await notifyCmsDataCommitted('categories', 'deleted', catId);
 
       res.json({
         ok: true,
@@ -2181,6 +2383,7 @@ async function startServer() {
         'SELECT * FROM cms_org_members WHERE id = ? LIMIT 1',
         [result.insertId]
       );
+      await notifyCmsDataCommitted('org', 'created', result.insertId);
       res.status(201).json({ ok: true, item: mapOrgMemberRow(inserted[0]) });
     } catch (err) {
       res.status(500).json({
@@ -2215,6 +2418,7 @@ async function startServer() {
       const [rows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_org_members ORDER BY sort_order ASC, id ASC'
       );
+      await notifyCmsDataCommitted('org', 'reordered');
       res.json({ ok: true, items: rows.map(mapOrgMemberRow) });
     } catch (err) {
       res.status(500).json({
@@ -2279,6 +2483,7 @@ async function startServer() {
         res.status(404).json({ ok: false, message: 'Anggota tidak ditemukan.' });
         return;
       }
+      await notifyCmsDataCommitted('org', 'updated', memberId);
       res.json({ ok: true, item: mapOrgMemberRow(updated[0]) });
     } catch (err) {
       res.status(500).json({
@@ -2296,6 +2501,7 @@ async function startServer() {
     }
     try {
       await pool.query('DELETE FROM cms_org_members WHERE id = ?', [memberId]);
+      await notifyCmsDataCommitted('org', 'deleted', memberId);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({
@@ -2359,6 +2565,7 @@ async function startServer() {
         'SELECT * FROM cms_partner_logos WHERE id = ? LIMIT 1',
         [result.insertId]
       );
+      await notifyCmsDataCommitted('logos', 'created', result.insertId);
       res.status(201).json({ ok: true, item: mapPartnerLogoRow(inserted[0]) });
     } catch (err) {
       res.status(500).json({
@@ -2393,6 +2600,7 @@ async function startServer() {
       const [rows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_partner_logos ORDER BY sort_order ASC, id ASC'
       );
+      await notifyCmsDataCommitted('logos', 'reordered');
       res.json({ ok: true, items: rows.map(mapPartnerLogoRow) });
     } catch (err) {
       res.status(500).json({
@@ -2448,6 +2656,7 @@ async function startServer() {
         res.status(404).json({ ok: false, message: 'Logo tidak ditemukan.' });
         return;
       }
+      await notifyCmsDataCommitted('logos', 'updated', logoId);
       res.json({ ok: true, item: mapPartnerLogoRow(updated[0]) });
     } catch (err) {
       res.status(500).json({
@@ -2465,11 +2674,60 @@ async function startServer() {
     }
     try {
       await pool.query('DELETE FROM cms_partner_logos WHERE id = ?', [logoId]);
+      await notifyCmsDataCommitted('logos', 'deleted', logoId);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({
         ok: false,
         message: err instanceof Error ? err.message : 'Gagal menghapus logo mitra.',
+      });
+    }
+  });
+
+  // CMS Site Settings Read & Update
+  app.get('/api/cms/settings', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const settings = await fetchSiteSettingsMap();
+      res.json({ ok: true, settings });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memuat pengaturan situs.',
+      });
+    }
+  });
+
+  app.put('/api/cms/settings', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const { settings } = req.body as { settings?: Record<string, unknown> };
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+      res.status(400).json({ ok: false, message: 'Format pengaturan situs tidak valid.' });
+      return;
+    }
+
+    try {
+      for (const [rawKey, rawVal] of Object.entries(settings)) {
+        const key = String(rawKey || '').trim().slice(0, 100);
+        if (!/^[a-z0-9_]+$/i.test(key)) continue;
+        const val = typeof rawVal === 'string' ? rawVal.trim() : String(rawVal ?? '').trim();
+        if (!val) {
+          await pool.query('DELETE FROM cms_site_settings WHERE setting_key = ?', [key]);
+        } else {
+          await pool.query(
+            `INSERT INTO cms_site_settings (setting_key, setting_value)
+             VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+            [key, val.slice(0, 4000)]
+          );
+        }
+      }
+
+      const updatedSettings = await fetchSiteSettingsMap();
+      await notifyCmsDataCommitted('settings', 'updated');
+      res.json({ ok: true, settings: updatedSettings });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menyimpan pengaturan situs.',
       });
     }
   });
@@ -2827,8 +3085,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[P2B Server] Listening on http://0.0.0.0:${PORT} (DB ready: ${dbReady})`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`[P2B Server] Listening on http://0.0.0.0:${PORT} (DB ready: ${dbReady}, WS: /ws/realtime)`);
   });
 }
 

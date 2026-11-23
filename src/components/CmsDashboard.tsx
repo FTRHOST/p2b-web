@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '@iconify/react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -11,6 +11,7 @@ import {
   NewsCategoryItem,
   OrgMemberItem,
   PartnerLogoItem,
+  SiteSettings,
 } from '../types/cms';
 import {
   DEFAULT_NEWS_CATEGORIES,
@@ -19,6 +20,7 @@ import {
   NewsGalleryItem,
 } from '../data/news';
 import { TinyMceEditor } from './TinyMceEditor';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 function formatBytes(bytes?: number): string {
   if (!bytes || bytes <= 0) return '';
@@ -74,6 +76,7 @@ type CmsTab =
   | 'media'
   | 'logos'
   | 'org'
+  | 'settings'
   | 'security';
 
 interface CmsDashboardProps {
@@ -200,6 +203,13 @@ export function CmsDashboard({
   const [logoError, setLogoError] = useState('');
   const [confirmDeleteLogoId, setConfirmDeleteLogoId] = useState<number | null>(null);
 
+  // Site Settings State
+  const [settingsForm, setSettingsForm] = useState<SiteSettings>({});
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [uploadingHeroBg, setUploadingHeroBg] = useState(false);
+  const [settingsError, setSettingsError] = useState('');
+
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -209,6 +219,27 @@ export function CmsDashboard({
     msg: string;
   } | null>(null);
 
+  const lastLocalCommitAtRef = useRef<number>(0);
+  const orgOrderDirtyRef = useRef(false);
+  const logoOrderDirtyRef = useRef(false);
+  const settingsDirtyRef = useRef(false);
+
+  useEffect(() => {
+    orgOrderDirtyRef.current = orgOrderDirty;
+  }, [orgOrderDirty]);
+
+  useEffect(() => {
+    logoOrderDirtyRef.current = logoOrderDirty;
+  }, [logoOrderDirty]);
+
+  useEffect(() => {
+    settingsDirtyRef.current = settingsDirty;
+  }, [settingsDirty]);
+
+  const markLocalCommit = () => {
+    lastLocalCommitAtRef.current = Date.now();
+  };
+
   const authHeaders = useCallback(
     () => ({
       'Content-Type': 'application/json',
@@ -217,60 +248,114 @@ export function CmsDashboard({
     [token]
   );
 
-  const notify = (msg: string) => {
+  const notify = useCallback((msg: string) => {
     setBannerNotice(msg);
     window.setTimeout(() => setBannerNotice(''), 3200);
-  };
+  }, []);
 
-  const loadAllCmsData = useCallback(async () => {
-    try {
-      const [ovRes, newsRes, catRes, mediaRes, orgRes, logoRes] = await Promise.all([
-        fetch('/api/cms/overview', { headers: authHeaders(), credentials: 'include' }),
-        fetch('/api/cms/news', { headers: authHeaders(), credentials: 'include' }),
-        fetch('/api/cms/categories', { headers: authHeaders(), credentials: 'include' }),
-        fetch('/api/cms/media', { headers: authHeaders(), credentials: 'include' }),
-        fetch('/api/cms/org-members', { headers: authHeaders(), credentials: 'include' }),
-        fetch('/api/cms/partner-logos', { headers: authHeaders(), credentials: 'include' }),
-      ]);
+  const loadAllCmsData = useCallback(
+    async (options?: { preserveDirtyEdits?: boolean }) => {
+      const preserveDirty = Boolean(options?.preserveDirtyEdits);
+      try {
+        const [ovRes, newsRes, catRes, mediaRes, orgRes, logoRes, settingsRes] =
+          await Promise.all([
+            fetch('/api/cms/overview', {
+              headers: authHeaders(),
+              credentials: 'include',
+              cache: 'no-store',
+            }),
+            fetch('/api/cms/news', {
+              headers: authHeaders(),
+              credentials: 'include',
+              cache: 'no-store',
+            }),
+            fetch('/api/cms/categories', {
+              headers: authHeaders(),
+              credentials: 'include',
+              cache: 'no-store',
+            }),
+            fetch('/api/cms/media', {
+              headers: authHeaders(),
+              credentials: 'include',
+              cache: 'no-store',
+            }),
+            fetch('/api/cms/org-members', {
+              headers: authHeaders(),
+              credentials: 'include',
+              cache: 'no-store',
+            }),
+            fetch('/api/cms/partner-logos', {
+              headers: authHeaders(),
+              credentials: 'include',
+              cache: 'no-store',
+            }),
+            fetch('/api/cms/settings', {
+              headers: authHeaders(),
+              credentials: 'include',
+              cache: 'no-store',
+            }),
+          ]);
 
-      if (ovRes.ok) {
-        const d = (await ovRes.json()) as { stats?: CmsStats };
-        if (d.stats) setStats(d.stats);
-      }
-      if (newsRes.ok) {
-        const d = (await newsRes.json()) as { items?: CmsNewsItem[] };
-        if (d.items) setNewsItems(d.items);
-      }
-      if (catRes.ok) {
-        const d = (await catRes.json()) as { items?: NewsCategoryItem[] };
-        if (d.items && d.items.length > 0) setNewsCategories(d.items);
-      }
-      if (mediaRes.ok) {
-        const d = (await mediaRes.json()) as { items?: CmsMediaItem[] };
-        if (d.items) setMediaItems(d.items);
-      }
-      if (orgRes.ok) {
-        const d = (await orgRes.json()) as { items?: OrgMemberItem[] };
-        if (d.items) {
-          setOrgMembers(d.items);
-          setOrgOrderDirty(false);
+        if (ovRes.ok) {
+          const d = (await ovRes.json()) as { stats?: CmsStats };
+          if (d.stats) setStats(d.stats);
         }
-      }
-      if (logoRes.ok) {
-        const d = (await logoRes.json()) as { items?: PartnerLogoItem[] };
-        if (d.items) {
-          setPartnerLogos(d.items);
-          setLogoOrderDirty(false);
+        if (newsRes.ok) {
+          const d = (await newsRes.json()) as { items?: CmsNewsItem[] };
+          if (d.items) setNewsItems(d.items);
         }
+        if (catRes.ok) {
+          const d = (await catRes.json()) as { items?: NewsCategoryItem[] };
+          if (d.items && d.items.length > 0) setNewsCategories(d.items);
+        }
+        if (mediaRes.ok) {
+          const d = (await mediaRes.json()) as { items?: CmsMediaItem[] };
+          if (d.items) setMediaItems(d.items);
+        }
+        if (orgRes.ok && (!preserveDirty || !orgOrderDirtyRef.current)) {
+          const d = (await orgRes.json()) as { items?: OrgMemberItem[] };
+          if (d.items) {
+            setOrgMembers(d.items);
+            setOrgOrderDirty(false);
+          }
+        }
+        if (logoRes.ok && (!preserveDirty || !logoOrderDirtyRef.current)) {
+          const d = (await logoRes.json()) as { items?: PartnerLogoItem[] };
+          if (d.items) {
+            setPartnerLogos(d.items);
+            setLogoOrderDirty(false);
+          }
+        }
+        if (settingsRes.ok && (!preserveDirty || !settingsDirtyRef.current)) {
+          const d = (await settingsRes.json()) as { settings?: SiteSettings };
+          if (d.settings) {
+            setSettingsForm(d.settings);
+            setSettingsDirty(false);
+          }
+        }
+      } catch {
+        // Keep current state if transient network error
       }
-    } catch {
-      // Keep current state if transient network error
-    }
-  }, [authHeaders]);
+    },
+    [authHeaders]
+  );
 
   useEffect(() => {
     void loadAllCmsData();
   }, [loadAllCmsData]);
+
+  useRealtimeSync({
+    enabled: true,
+    pollIntervalMs: 15000,
+    onSync: useCallback(async () => {
+      if (Date.now() - lastLocalCommitAtRef.current < 1500) {
+        return;
+      }
+      await loadAllCmsData({ preserveDirtyEdits: true });
+      onPublicDataChanged();
+      notify('Data diperbarui secara real-time dari server.');
+    }, [loadAllCmsData, onPublicDataChanged, notify]),
+  });
 
   const uploadSingleMedia = async (file: File): Promise<CmsUploadedMedia> => {
     const formData = new FormData();
@@ -484,6 +569,7 @@ export function CmsDashboard({
         message?: string;
       };
       if (res.ok) {
+        markLocalCommit();
         setEditorOpen(false);
         setActiveTab('news');
         await loadAllCmsData();
@@ -511,6 +597,7 @@ export function CmsDashboard({
       credentials: 'include',
     });
     if (res.ok) {
+      markLocalCommit();
       setSelectedNewsIds((prev) => prev.filter((id) => id !== dbId));
       await loadAllCmsData();
       onPublicDataChanged();
@@ -544,6 +631,7 @@ export function CmsDashboard({
         setCategoryError(data.message || 'Gagal menambah kategori.');
         return;
       }
+      markLocalCommit();
       setNewCategoryName('');
       if (data.item) setFormCategory(data.item.name);
       await loadAllCmsData();
@@ -581,6 +669,7 @@ export function CmsDashboard({
         setCategoryError(data.message || 'Gagal memperbarui kategori.');
         return;
       }
+      markLocalCommit();
       if (data.oldName && formCategory === data.oldName && data.item) {
         setFormCategory(data.item.name);
       }
@@ -615,6 +704,7 @@ export function CmsDashboard({
         setCategoryError(data.message || 'Gagal menghapus kategori.');
         return;
       }
+      markLocalCommit();
       if (data.deletedName && formCategory === data.deletedName && data.reassignedTo) {
         setFormCategory(data.reassignedTo);
       }
@@ -645,6 +735,7 @@ export function CmsDashboard({
         message?: string;
       };
       if (res.ok && data.ok) {
+        markLocalCommit();
         const count = data.deletedCount ?? selectedNewsIds.length;
         setSelectedNewsIds([]);
         setConfirmBulkDeleteNews(false);
@@ -773,6 +864,7 @@ export function CmsDashboard({
         return;
       }
 
+      markLocalCommit();
       setNewsImportOpen(false);
       setNewsImportFile(null);
       await loadAllCmsData();
@@ -794,6 +886,7 @@ export function CmsDashboard({
 
     setUploadingLibraryMedia(true);
     try {
+      markLocalCommit();
       for (const file of files) {
         await uploadSingleMedia(file);
       }
@@ -867,6 +960,7 @@ export function CmsDashboard({
         return;
       }
 
+      markLocalCommit();
       setMediaImportOpen(false);
       setMediaImportFile(null);
       await loadAllCmsData();
@@ -934,6 +1028,7 @@ export function CmsDashboard({
         return;
       }
 
+      markLocalCommit();
       setEditingMedia(null);
       await loadAllCmsData();
       onPublicDataChanged();
@@ -952,6 +1047,7 @@ export function CmsDashboard({
       credentials: 'include',
     });
     if (res.ok) {
+      markLocalCommit();
       setConfirmDeleteMediaId(null);
       await loadAllCmsData();
       notify('Berkas media dihapus dari database.');
@@ -1003,6 +1099,7 @@ export function CmsDashboard({
     setUploadingOrgPhoto(true);
     setOrgError('');
     try {
+      markLocalCommit();
       const uploaded = await uploadSingleMedia(file);
       setOrgFormPhotoUrl(uploaded.url);
       await loadAllCmsData();
@@ -1050,6 +1147,7 @@ export function CmsDashboard({
         setOrgError(data.message || 'Gagal menyimpan data struktur organisasi.');
         return;
       }
+      markLocalCommit();
       setOrgModalOpen(false);
       await loadAllCmsData();
       onPublicDataChanged();
@@ -1093,6 +1191,7 @@ export function CmsDashboard({
         message?: string;
       };
       if (res.ok && data.ok && Array.isArray(data.items)) {
+        markLocalCommit();
         setOrgMembers(data.items);
         setOrgOrderDirty(false);
         onPublicDataChanged();
@@ -1119,6 +1218,7 @@ export function CmsDashboard({
       credentials: 'include',
     });
     if (res.ok) {
+      markLocalCommit();
       setConfirmDeleteOrgId(null);
       await loadAllCmsData();
       onPublicDataChanged();
@@ -1156,6 +1256,7 @@ export function CmsDashboard({
     setUploadingLogoFile(true);
     setLogoError('');
     try {
+      markLocalCommit();
       const uploaded = await uploadSingleMedia(file);
       setLogoFormUrl(uploaded.url);
       if (!logoFormName.trim()) {
@@ -1204,6 +1305,7 @@ export function CmsDashboard({
         setLogoError(data.message || 'Gagal menyimpan logo mitra.');
         return;
       }
+      markLocalCommit();
       setLogoModalOpen(false);
       await loadAllCmsData();
       onPublicDataChanged();
@@ -1233,6 +1335,7 @@ export function CmsDashboard({
       }),
     });
     if (res.ok) {
+      markLocalCommit();
       await loadAllCmsData();
       onPublicDataChanged();
       notify(
@@ -1269,6 +1372,7 @@ export function CmsDashboard({
         message?: string;
       };
       if (res.ok && data.ok && Array.isArray(data.items)) {
+        markLocalCommit();
         setPartnerLogos(data.items);
         setLogoOrderDirty(false);
         onPublicDataChanged();
@@ -1295,10 +1399,72 @@ export function CmsDashboard({
       credentials: 'include',
     });
     if (res.ok) {
+      markLocalCommit();
       setConfirmDeleteLogoId(null);
       await loadAllCmsData();
       onPublicDataChanged();
       notify('Logo mitra dihapus dari database.');
+    }
+  };
+
+  // Site Settings Handlers
+  const updateSettingField = (key: keyof SiteSettings, value: string) => {
+    setSettingsForm((prev) => ({ ...prev, [key]: value }));
+    setSettingsDirty(true);
+    setSettingsError('');
+  };
+
+  const handleUploadHeroImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingHeroBg(true);
+    setSettingsError('');
+    try {
+      markLocalCommit();
+      const media = await uploadSingleMedia(file);
+      updateSettingField('hero_image_url', media.url);
+      await loadAllCmsData({ preserveDirtyEdits: true });
+      notify('Gambar hero beranda berhasil diunggah.');
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : 'Gagal mengunggah gambar hero.'
+      );
+    } finally {
+      setUploadingHeroBg(false);
+    }
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    setSettingsError('');
+    try {
+      const res = await fetch('/api/cms/settings', {
+        method: 'PUT',
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ settings: settingsForm }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        settings?: SiteSettings;
+        message?: string;
+      };
+      if (!res.ok || !data.ok) {
+        setSettingsError(data.message || 'Gagal menyimpan pengaturan situs.');
+        return;
+      }
+      markLocalCommit();
+      setSettingsDirty(false);
+      if (data.settings) setSettingsForm(data.settings);
+      await loadAllCmsData();
+      onPublicDataChanged();
+      notify('Pengaturan situs berhasil disimpan dan disinkronkan secara real-time.');
+    } catch {
+      setSettingsError('Tidak dapat terhubung ke server CMS.');
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -1382,6 +1548,7 @@ export function CmsDashboard({
     { id: 'media', label: 'Kelola Media', icon: 'mdi:folder-open-outline' },
     { id: 'logos', label: 'Logo Mitra', icon: 'mdi:office-building-outline' },
     { id: 'org', label: 'Struktur Organisasi', icon: 'mdi:account-group-outline' },
+    { id: 'settings', label: 'Pengaturan Situs', icon: 'mdi:compass-outline' },
     { id: 'security', label: 'Keamanan Akun', icon: 'mdi:lock-outline' },
   ];
 
@@ -2841,6 +3008,229 @@ export function CmsDashboard({
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <form
+            onSubmit={handleSaveSettings}
+            className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#C9A45A]/20 pb-5">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                  Konfigurasi Dinamis Website · Tersinkron Real-Time
+                </span>
+                <h2 className="text-2xl font-normal text-[#164234]">
+                  Pengaturan Situs P2B UIN Salatiga
+                </h2>
+                <p className="text-xs sm:text-sm text-[#3E544B]">
+                  Kosongkan kolom tertentu untuk menggunakan teks bawaan standar. Perubahan otomatis memperbarui halaman publik yang sedang terbuka.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                {settingsDirty && (
+                  <button
+                    type="button"
+                    disabled={savingSettings}
+                    onClick={() => {
+                      setSettingsDirty(false);
+                      void loadAllCmsData();
+                    }}
+                    className="px-4 py-2.5 rounded-full bg-white hover:bg-[#F6F3EC] text-[#3E544B] border border-[#C9A45A]/35 text-xs sm:text-sm transition-colors cursor-pointer"
+                  >
+                    Batalkan
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={savingSettings || uploadingHeroBg}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Icon icon="mdi:check" className="w-4 h-4 text-[#F4D993]" />
+                  <span>{savingSettings ? 'Menyimpan...' : 'Simpan Pengaturan Situs'}</span>
+                </button>
+              </div>
+            </div>
+
+            {settingsError && (
+              <div
+                role="alert"
+                className="px-4 py-3 rounded-2xl bg-[#9b2c2c]/10 border border-[#9b2c2c]/25 text-xs sm:text-sm text-[#9b2c2c]"
+              >
+                {settingsError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Hero & Identitas */}
+              <div className="rounded-3xl bg-white/80 border border-[#C9A45A]/25 p-5 sm:p-6 flex flex-col gap-4">
+                <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                  Bagian Hero Beranda
+                </span>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-[#3E544B]">Judul Utama Hero</label>
+                  <input
+                    type="text"
+                    value={settingsForm.hero_title || ''}
+                    onChange={(e) => updateSettingField('hero_title', e.target.value)}
+                    placeholder="Pusat Pengembangan Bisnis"
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-[#3E544B]">Subjudul / Deskripsi Hero</label>
+                  <textarea
+                    rows={3}
+                    value={settingsForm.hero_subtitle || ''}
+                    onChange={(e) => updateSettingField('hero_subtitle', e.target.value)}
+                    placeholder="Unit strategis UIN Salatiga dalam optimalisasi aset, layanan komersial, kemitraan..."
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs text-[#3E544B]">URL / Gambar Latar Hero</label>
+                    <label className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer transition-colors">
+                      <Icon icon="mdi:upload-outline" className="w-3.5 h-3.5 text-[#F4D993]" />
+                      <span>{uploadingHeroBg ? 'Mengunggah...' : 'Unggah Gambar'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingHeroBg}
+                        onChange={(e) => void handleUploadHeroImage(e)}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    value={settingsForm.hero_image_url || ''}
+                    onChange={(e) => updateSettingField('hero_image_url', e.target.value)}
+                    placeholder="https://... atau /api/media/..."
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-xs sm:text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+                </div>
+              </div>
+
+              {/* Kontak & Lokasi */}
+              <div className="rounded-3xl bg-white/80 border border-[#C9A45A]/25 p-5 sm:p-6 flex flex-col gap-4">
+                <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                  Kontak & Lokasi Resmi
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">Nomor Telepon / WhatsApp</label>
+                    <input
+                      type="text"
+                      value={settingsForm.contact_phone || ''}
+                      onChange={(e) => updateSettingField('contact_phone', e.target.value)}
+                      placeholder="0811-2520-4371"
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">Email Resmi</label>
+                    <input
+                      type="email"
+                      value={settingsForm.contact_email || ''}
+                      onChange={(e) => updateSettingField('contact_email', e.target.value)}
+                      placeholder="p2b@uinsalatiga.ac.id"
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-[#3E544B]">Alamat Kantor P2B</label>
+                  <textarea
+                    rows={2}
+                    value={settingsForm.location_address || ''}
+                    onChange={(e) => updateSettingField('location_address', e.target.value)}
+                    placeholder="Gedung Auditorium & Student Center Prof. Dr. H. Achmadi..."
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-[#3E544B]">Tautan Google Maps</label>
+                  <input
+                    type="text"
+                    value={settingsForm.location_maps_url || ''}
+                    onChange={(e) => updateSettingField('location_maps_url', e.target.value)}
+                    placeholder="https://maps.google.com/..."
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-xs sm:text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+                </div>
+              </div>
+
+              {/* Visi & Footer */}
+              <div className="lg:col-span-2 rounded-3xl bg-white/80 border border-[#C9A45A]/25 p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Visi Kelembagaan & Footer Website
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-[#3E544B]">Teks Visi P2B</label>
+                  <textarea
+                    rows={3}
+                    value={settingsForm.page_visimisi_visi_text || ''}
+                    onChange={(e) =>
+                      updateSettingField('page_visimisi_visi_text', e.target.value)
+                    }
+                    placeholder="Teks visi utama P2B UIN Salatiga..."
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-[#3E544B]">Deskripsi Singkat Footer</label>
+                  <textarea
+                    rows={3}
+                    value={settingsForm.footer_description || ''}
+                    onChange={(e) =>
+                      updateSettingField('footer_description', e.target.value)
+                    }
+                    placeholder="Deskripsi singkat P2B pada footer..."
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-[#3E544B]">Teks Hak Cipta Footer</label>
+                  <input
+                    type="text"
+                    value={settingsForm.footer_copyright || ''}
+                    onChange={(e) =>
+                      updateSettingField('footer_copyright', e.target.value)
+                    }
+                    placeholder="© 2026 Pusat Pengembangan Bisnis UIN Salatiga"
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-[#3E544B]">Tautan Instagram Resmi</label>
+                  <input
+                    type="text"
+                    value={settingsForm.footer_social_url || ''}
+                    onChange={(e) =>
+                      updateSettingField('footer_social_url', e.target.value)
+                    }
+                    placeholder="https://www.instagram.com/p2b.uinsalatiga"
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+                </div>
+              </div>
+            </div>
+          </form>
         )}
 
         {activeTab === 'security' && (

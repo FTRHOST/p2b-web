@@ -3,14 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
+import { useRealtimeSync } from './hooks/useRealtimeSync';
 import { Navbar, NavPageTarget } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { LogoMarqueeSection } from './components/LogoMarqueeSection';
 import { WhoWeAre } from './components/WhoWeAre';
 import { NewsSection } from './components/NewsSection';
 import { LocationSection } from './components/LocationSection';
+import { VisiCard } from './components/VisiCard';
 import { Footer } from './components/Footer';
 import { AllNewsPage } from './components/AllNewsPage';
 import { AboutPage } from './components/AboutPage';
@@ -154,32 +156,40 @@ export default function App() {
     return initialPath === '/cms' || initialPath === '/silahkanmasuk';
   });
 
+  const markVersionSyncedRef = useRef<(version?: string | null) => void>(() => {});
+
   const fetchPublicBootstrap = useCallback(async () => {
     try {
-      const res = await fetch('/api/public/bootstrap');
+      const res = await fetch('/api/public/bootstrap', { cache: 'no-store' });
       if (!res.ok) return;
       const data = (await res.json()) as {
         ok?: boolean;
+        version?: string;
         news?: NewsArticle[];
         categories?: NewsCategoryItem[];
         orgMembers?: OrgMemberItem[];
         partnerLogos?: PartnerLogoItem[];
         settings?: SiteSettings;
       };
-      if (data.ok && Array.isArray(data.news) && data.news.length > 0) {
-        setNewsArticles(data.news);
-      }
-      if (data.ok && Array.isArray(data.categories) && data.categories.length > 0) {
-        setNewsCategories(data.categories);
-      }
-      if (data.ok && Array.isArray(data.orgMembers) && data.orgMembers.length > 0) {
-        setOrgMembers(data.orgMembers);
-      }
-      if (data.ok && Array.isArray(data.partnerLogos)) {
-        setPartnerLogos(data.partnerLogos);
-      }
-      if (data.ok && data.settings) {
-        setSiteSettings(data.settings);
+      if (data.ok) {
+        if (data.version) {
+          markVersionSyncedRef.current(data.version);
+        }
+        if (Array.isArray(data.news)) {
+          setNewsArticles(data.news);
+        }
+        if (Array.isArray(data.categories) && data.categories.length > 0) {
+          setNewsCategories(data.categories);
+        }
+        if (Array.isArray(data.orgMembers)) {
+          setOrgMembers(data.orgMembers);
+        }
+        if (Array.isArray(data.partnerLogos)) {
+          setPartnerLogos(data.partnerLogos);
+        }
+        if (data.settings) {
+          setSiteSettings(data.settings);
+        }
       }
     } catch {
       // Fallback gracefully to bundled initial content
@@ -191,6 +201,18 @@ export default function App() {
   useEffect(() => {
     void fetchPublicBootstrap();
   }, [fetchPublicBootstrap]);
+
+  const { markVersionSynced } = useRealtimeSync({
+    enabled: pathname !== '/cms' && pathname !== '/silahkanmasuk',
+    pollIntervalMs: 15000,
+    onSync: useCallback(() => {
+      return fetchPublicBootstrap();
+    }, [fetchPublicBootstrap]),
+  });
+
+  useEffect(() => {
+    markVersionSyncedRef.current = markVersionSynced;
+  }, [markVersionSynced]);
 
   useEffect(() => {
     const syncNavigation = () => {
@@ -679,6 +701,11 @@ export default function App() {
             addressText={siteSettings.location_address}
             settings={siteSettings}
           />
+          <div className="w-full flex justify-center px-3 md:px-5 pb-2 md:pb-4 bg-[#F6F3EC]">
+            <div className="w-full max-w-[1536px]">
+              <VisiCard settings={siteSettings} />
+            </div>
+          </div>
           <Footer
             settings={siteSettings}
             onNavigate={(target) => {
