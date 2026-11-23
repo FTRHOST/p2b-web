@@ -9,7 +9,6 @@ import {
   CmsUploadedMedia,
   CmsUser,
   NewsCategoryItem,
-  OrgMemberItem,
   PartnerLogoItem,
   SiteSettings,
 } from '../types/cms';
@@ -75,7 +74,6 @@ type CmsTab =
   | 'news'
   | 'media'
   | 'logos'
-  | 'org'
   | 'settings'
   | 'security';
 
@@ -169,24 +167,6 @@ export function CmsDashboard({
   const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null);
   const [categoryError, setCategoryError] = useState('');
 
-  // Organizational Structure State
-  const [orgMembers, setOrgMembers] = useState<OrgMemberItem[]>([]);
-  const [orgModalOpen, setOrgModalOpen] = useState(false);
-  const [editingOrgMember, setEditingOrgMember] = useState<OrgMemberItem | null>(null);
-  const [orgFormName, setOrgFormName] = useState('');
-  const [orgFormPosition, setOrgFormPosition] = useState('');
-  const [orgFormTier, setOrgFormTier] = useState<OrgMemberItem['tier']>('divisi');
-  const [orgFormBio, setOrgFormBio] = useState('');
-  const [orgFormPhotoUrl, setOrgFormPhotoUrl] = useState('');
-  const [orgFormSortOrder, setOrgFormSortOrder] = useState(1);
-  const [orgFormIsActive, setOrgFormIsActive] = useState(true);
-  const [uploadingOrgPhoto, setUploadingOrgPhoto] = useState(false);
-  const [savingOrgMember, setSavingOrgMember] = useState(false);
-  const [savingOrgOrder, setSavingOrgOrder] = useState(false);
-  const [orgOrderDirty, setOrgOrderDirty] = useState(false);
-  const [orgError, setOrgError] = useState('');
-  const [confirmDeleteOrgId, setConfirmDeleteOrgId] = useState<number | null>(null);
-
   // Partner Logos Marquee State
   const [partnerLogos, setPartnerLogos] = useState<PartnerLogoItem[]>([]);
   const [logoModalOpen, setLogoModalOpen] = useState(false);
@@ -220,13 +200,8 @@ export function CmsDashboard({
   } | null>(null);
 
   const lastLocalCommitAtRef = useRef<number>(0);
-  const orgOrderDirtyRef = useRef(false);
   const logoOrderDirtyRef = useRef(false);
   const settingsDirtyRef = useRef(false);
-
-  useEffect(() => {
-    orgOrderDirtyRef.current = orgOrderDirty;
-  }, [orgOrderDirty]);
 
   useEffect(() => {
     logoOrderDirtyRef.current = logoOrderDirty;
@@ -257,7 +232,7 @@ export function CmsDashboard({
     async (options?: { preserveDirtyEdits?: boolean }) => {
       const preserveDirty = Boolean(options?.preserveDirtyEdits);
       try {
-        const [ovRes, newsRes, catRes, mediaRes, orgRes, logoRes, settingsRes] =
+        const [ovRes, newsRes, catRes, mediaRes, logoRes, settingsRes] =
           await Promise.all([
             fetch('/api/cms/overview', {
               headers: authHeaders(),
@@ -275,11 +250,6 @@ export function CmsDashboard({
               cache: 'no-store',
             }),
             fetch('/api/cms/media', {
-              headers: authHeaders(),
-              credentials: 'include',
-              cache: 'no-store',
-            }),
-            fetch('/api/cms/org-members', {
               headers: authHeaders(),
               credentials: 'include',
               cache: 'no-store',
@@ -311,13 +281,6 @@ export function CmsDashboard({
         if (mediaRes.ok) {
           const d = (await mediaRes.json()) as { items?: CmsMediaItem[] };
           if (d.items) setMediaItems(d.items);
-        }
-        if (orgRes.ok && (!preserveDirty || !orgOrderDirtyRef.current)) {
-          const d = (await orgRes.json()) as { items?: OrgMemberItem[] };
-          if (d.items) {
-            setOrgMembers(d.items);
-            setOrgOrderDirty(false);
-          }
         }
         if (logoRes.ok && (!preserveDirty || !logoOrderDirtyRef.current)) {
           const d = (await logoRes.json()) as { items?: PartnerLogoItem[] };
@@ -1065,167 +1028,6 @@ export function CmsDashboard({
     }
   };
 
-  // Organizational Structure Handlers
-  const openCreateOrgModal = () => {
-    setEditingOrgMember(null);
-    setOrgFormName('');
-    setOrgFormPosition('');
-    setOrgFormTier('divisi');
-    setOrgFormBio('');
-    setOrgFormPhotoUrl('');
-    const maxOrder = orgMembers.reduce((acc, m) => Math.max(acc, m.sortOrder), 0);
-    setOrgFormSortOrder(maxOrder + 1);
-    setOrgFormIsActive(true);
-    setOrgError('');
-    setOrgModalOpen(true);
-  };
-
-  const openEditOrgModal = (member: OrgMemberItem) => {
-    setEditingOrgMember(member);
-    setOrgFormName(member.name);
-    setOrgFormPosition(member.positionTitle);
-    setOrgFormTier(member.tier);
-    setOrgFormBio(member.bio || '');
-    setOrgFormPhotoUrl(member.photoUrl || '');
-    setOrgFormSortOrder(member.sortOrder);
-    setOrgFormIsActive(member.isActive);
-    setOrgError('');
-    setOrgModalOpen(true);
-  };
-
-  const handleUploadOrgPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingOrgPhoto(true);
-    setOrgError('');
-    try {
-      markLocalCommit();
-      const uploaded = await uploadSingleMedia(file);
-      setOrgFormPhotoUrl(uploaded.url);
-      await loadAllCmsData();
-      notify('Foto personal berhasil diunggah ke pustaka media.');
-    } catch (err) {
-      setOrgError(err instanceof Error ? err.message : 'Gagal mengunggah foto.');
-    } finally {
-      setUploadingOrgPhoto(false);
-      e.target.value = '';
-    }
-  };
-
-  const handleSaveOrgMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!orgFormName.trim() || !orgFormPosition.trim()) {
-      setOrgError('Nama lengkap dan jabatan wajib diisi.');
-      return;
-    }
-    setSavingOrgMember(true);
-    setOrgError('');
-    try {
-      const endpoint = editingOrgMember
-        ? `/api/cms/org-members/${editingOrgMember.id}`
-        : '/api/cms/org-members';
-      const method = editingOrgMember ? 'PUT' : 'POST';
-      const res = await fetch(endpoint, {
-        method,
-        headers: authHeaders(),
-        credentials: 'include',
-        body: JSON.stringify({
-          name: orgFormName.trim(),
-          positionTitle: orgFormPosition.trim(),
-          tier: orgFormTier,
-          bio: orgFormBio.trim(),
-          photoUrl: orgFormPhotoUrl.trim(),
-          sortOrder: Number(orgFormSortOrder) > 0 ? Number(orgFormSortOrder) : 1,
-          isActive: orgFormIsActive,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        message?: string;
-      };
-      if (!res.ok || !data.ok) {
-        setOrgError(data.message || 'Gagal menyimpan data struktur organisasi.');
-        return;
-      }
-      markLocalCommit();
-      setOrgModalOpen(false);
-      await loadAllCmsData();
-      onPublicDataChanged();
-      notify(
-        editingOrgMember
-          ? 'Data pejabat/pengelola diperbarui.'
-          : 'Anggota baru ditambahkan ke struktur organisasi.'
-      );
-    } catch {
-      setOrgError('Tidak dapat terhubung ke server.');
-    } finally {
-      setSavingOrgMember(false);
-    }
-  };
-
-  const handleMoveOrgMember = (index: number, direction: -1 | 1) => {
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= orgMembers.length || savingOrgOrder) return;
-
-    const reordered = [...orgMembers];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(targetIndex, 0, moved);
-
-    setOrgMembers(reordered.map((item, idx) => ({ ...item, sortOrder: idx + 1 })));
-    setOrgOrderDirty(true);
-  };
-
-  const handleSaveOrgOrder = async () => {
-    if (!orgOrderDirty || orgMembers.length === 0 || savingOrgOrder) return;
-    setSavingOrgOrder(true);
-    try {
-      const res = await fetch('/api/cms/org-members/reorder', {
-        method: 'PATCH',
-        headers: authHeaders(),
-        credentials: 'include',
-        body: JSON.stringify({ orderedIds: orgMembers.map((m) => m.id) }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        items?: OrgMemberItem[];
-        message?: string;
-      };
-      if (res.ok && data.ok && Array.isArray(data.items)) {
-        markLocalCommit();
-        setOrgMembers(data.items);
-        setOrgOrderDirty(false);
-        onPublicDataChanged();
-        notify('Urutan struktur organisasi disimpan ke MariaDB.');
-      } else {
-        notify(data.message || 'Gagal menyimpan urutan struktur organisasi.');
-      }
-    } catch {
-      notify('Tidak dapat terhubung ke server untuk menyimpan urutan.');
-    } finally {
-      setSavingOrgOrder(false);
-    }
-  };
-
-  const handleCancelOrgOrder = async () => {
-    await loadAllCmsData();
-    notify('Perubahan urutan dibatalkan.');
-  };
-
-  const handleDeleteOrgMember = async (id: number) => {
-    const res = await fetch(`/api/cms/org-members/${id}`, {
-      method: 'DELETE',
-      headers: authHeaders(),
-      credentials: 'include',
-    });
-    if (res.ok) {
-      markLocalCommit();
-      setConfirmDeleteOrgId(null);
-      await loadAllCmsData();
-      onPublicDataChanged();
-      notify('Anggota dihapus dari struktur organisasi.');
-    }
-  };
-
   // Partner Logos Marquee Handlers
   const openCreateLogoModal = () => {
     setEditingLogo(null);
@@ -1547,7 +1349,6 @@ export function CmsDashboard({
     { id: 'news', label: 'Kelola Berita', icon: 'mdi:newspaper-variant-outline' },
     { id: 'media', label: 'Kelola Media', icon: 'mdi:folder-open-outline' },
     { id: 'logos', label: 'Logo Mitra', icon: 'mdi:office-building-outline' },
-    { id: 'org', label: 'Struktur Organisasi', icon: 'mdi:account-group-outline' },
     { id: 'settings', label: 'Pengaturan Situs', icon: 'mdi:compass-outline' },
     { id: 'security', label: 'Keamanan Akun', icon: 'mdi:lock-outline' },
   ];
@@ -2814,202 +2615,6 @@ export function CmsDashboard({
           </div>
         )}
 
-        {activeTab === 'org' && (
-          <div className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex flex-col gap-1">
-                <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
-                  Hierarki Dinamis MariaDB ({orgMembers.length} Posisi)
-                </span>
-                <h2 className="text-2xl font-normal text-[#164234]">
-                  Struktur Organisasi P2B UIN Salatiga
-                </h2>
-                <p className="text-xs sm:text-sm text-[#3E544B]">
-                  Atur urutan tampil mulai dari peringkat #1 (Rektor), #2 (Kepala P2B), lalu manajemen dan divisi di bawahnya.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                {orgOrderDirty && (
-                  <button
-                    type="button"
-                    disabled={savingOrgOrder}
-                    onClick={() => void handleCancelOrgOrder()}
-                    className="px-4 py-2.5 rounded-full bg-white hover:bg-[#F6F3EC] text-[#3E544B] border border-[#C9A45A]/35 text-xs sm:text-sm transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    Batalkan Urutan
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  disabled={!orgOrderDirty || savingOrgOrder}
-                  onClick={() => void handleSaveOrgOrder()}
-                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs sm:text-sm transition-colors whitespace-nowrap ${
-                    orgOrderDirty
-                      ? 'bg-[#8F6D26] hover:bg-[#7A5B1D] text-[#FAF8F3] cursor-pointer shadow-sm'
-                      : 'bg-white/80 text-[#3E544B]/60 border border-[#C9A45A]/25 cursor-not-allowed'
-                  }`}
-                >
-                  <Icon icon="mdi:check" className="w-4 h-4" />
-                  <span>{savingOrgOrder ? 'Menyimpan Urutan...' : 'Simpan Urutan'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={openCreateOrgModal}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  <Icon icon="mdi:plus" className="w-4 h-4 text-[#F4D993]" />
-                  <span>Tambah Anggota</span>
-                </button>
-              </div>
-            </div>
-
-            {orgOrderDirty && (
-              <div className="rounded-2xl bg-[#F4EFE3] border border-[#C9A45A]/45 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm text-[#164234]">
-                <span>
-                  Urutan tampilan telah diubah di layar. Klik <strong>Simpan Urutan</strong> agar tersimpan ke server dan halaman publik.
-                </span>
-                <button
-                  type="button"
-                  disabled={savingOrgOrder}
-                  onClick={() => void handleSaveOrgOrder()}
-                  className="px-4 py-1.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs whitespace-nowrap cursor-pointer w-fit"
-                >
-                  {savingOrgOrder ? 'Menyimpan...' : 'Simpan Sekarang'}
-                </button>
-              </div>
-            )}
-
-            {orgMembers.length === 0 ? (
-              <div className="rounded-2xl bg-white/70 border border-[#C9A45A]/25 p-8 text-center text-sm text-[#3E544B]">
-                Belum ada data struktur organisasi. Klik &ldquo;Tambah Anggota&rdquo; untuk mengisi jabatan dan foto personal.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {orgMembers.map((member, index) => {
-                  const isConfirmDelete = confirmDeleteOrgId === member.id;
-                  const tierLabel =
-                    member.tier === 'rektor'
-                      ? 'Pimpinan Universitas'
-                      : member.tier === 'kepala_p2b'
-                        ? 'Kepala P2B'
-                        : member.tier === 'manajemen'
-                          ? 'Manajemen & Sekretariat'
-                          : 'Koordinator Divisi';
-                  return (
-                    <div
-                      key={member.id}
-                      className="rounded-2xl bg-white/85 border border-[#C9A45A]/25 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="flex flex-col items-center gap-1 shrink-0">
-                          <span className="text-xs tabular-nums font-medium text-[#8F6D26]">
-                            #{String(index + 1).padStart(2, '0')}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              disabled={index === 0 || savingOrgOrder}
-                              onClick={() => handleMoveOrgMember(index, -1)}
-                              title="Naikkan urutan"
-                              className="w-7 h-7 rounded-lg bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/25 flex items-center justify-center disabled:opacity-35 cursor-pointer transition-colors"
-                            >
-                              <Icon icon="mdi:arrow-up" className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={index === orgMembers.length - 1 || savingOrgOrder}
-                              onClick={() => handleMoveOrgMember(index, 1)}
-                              title="Turunkan urutan"
-                              className="w-7 h-7 rounded-lg bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/25 flex items-center justify-center disabled:opacity-35 cursor-pointer transition-colors"
-                            >
-                              <Icon icon="mdi:arrow-down" className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="w-14 h-16 rounded-xl bg-gradient-to-br from-[#EFE9DB] to-[#E2ECE5] border border-[#C9A45A]/30 overflow-hidden shrink-0 flex items-center justify-center">
-                          {member.photoUrl ? (
-                            <img
-                              src={member.photoUrl}
-                              alt={member.name}
-                              referrerPolicy="no-referrer"
-                              className="w-full h-full object-cover object-top"
-                            />
-                          ) : (
-                            <Icon icon="mdi:account-outline" className="w-6 h-6 text-[#164234]/60" />
-                          )}
-                        </div>
-
-                        <div className="flex flex-col gap-0.5 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wider text-[#8F6D26]">
-                            <span>{tierLabel}</span>
-                            <span aria-hidden="true">·</span>
-                            <span className={member.isActive ? 'text-[#164234]' : 'text-[#9b2c2c]'}>
-                              {member.isActive ? 'Ditampilkan' : 'Disembunyikan'}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span className="tabular-nums text-[#3E544B]">
-                              Urutan DB: {member.sortOrder}
-                            </span>
-                          </div>
-                          <h3 className="text-base sm:text-lg font-normal text-[#164234] truncate">
-                            {member.name}
-                          </h3>
-                          <p className="text-xs sm:text-sm text-[#3E544B] truncate">
-                            {member.positionTitle}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0 pl-12 md:pl-0">
-                        <button
-                          type="button"
-                          onClick={() => openEditOrgModal(member)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[rgba(22,66,52,0.08)] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] text-xs transition-colors cursor-pointer"
-                        >
-                          <Icon icon="mdi:pencil-outline" className="w-3.5 h-3.5" />
-                          <span>Edit</span>
-                        </button>
-
-                        {!isConfirmDelete ? (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDeleteOrgId(member.id)}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#9b2c2c]/10 hover:bg-[#9b2c2c] text-[#9b2c2c] hover:text-white text-xs transition-colors cursor-pointer"
-                          >
-                            <Icon icon="mdi:trash-can-outline" className="w-3.5 h-3.5" />
-                            <span>Hapus</span>
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => void handleDeleteOrgMember(member.id)}
-                              className="px-3 py-1.5 rounded-xl bg-[#9b2c2c] text-white text-xs cursor-pointer"
-                            >
-                              Ya, Hapus
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteOrgId(null)}
-                              className="px-3 py-1.5 rounded-xl bg-[#F6F3EC] text-[#164234] text-xs cursor-pointer"
-                            >
-                              Batal
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
         {activeTab === 'settings' && (
           <form
             onSubmit={handleSaveSettings}
@@ -3122,13 +2727,24 @@ export function CmsDashboard({
                   Kontak & Lokasi Resmi
                 </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-[#3E544B]">Nomor Telepon / WhatsApp</label>
+                    <label className="text-xs text-[#3E544B]">Nomor Telepon</label>
                     <input
                       type="text"
                       value={settingsForm.contact_phone || ''}
                       onChange={(e) => updateSettingField('contact_phone', e.target.value)}
+                      placeholder="0811-2520-4371"
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">Nomor WhatsApp</label>
+                    <input
+                      type="text"
+                      value={settingsForm.contact_whatsapp || ''}
+                      onChange={(e) => updateSettingField('contact_whatsapp', e.target.value)}
                       placeholder="0811-2520-4371"
                       className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
                     />
@@ -3581,201 +3197,6 @@ export function CmsDashboard({
                     className="px-5 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs sm:text-sm cursor-pointer disabled:opacity-60"
                   >
                     {importingNews ? 'Mengimpor...' : 'Mulai Import Berita'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Add / Edit Organizational Member Modal */}
-      <AnimatePresence>
-        {orgModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setOrgModalOpen(false)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/30 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 12 }}
-              transition={{ duration: 0.2 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-3xl bg-[#FAF8F3] border border-[#C9A45A]/35 p-6 sm:p-7 text-[#164234] shadow-xl relative"
-            >
-              <button
-                type="button"
-                onClick={() => setOrgModalOpen(false)}
-                aria-label="Tutup modal anggota struktur"
-                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] flex items-center justify-center cursor-pointer"
-              >
-                <Icon icon="mdi:close" className="w-4 h-4" />
-              </button>
-
-              <div className="flex flex-col gap-1 mb-5 pr-10">
-                <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
-                  Struktur Organisasi Dinamis
-                </span>
-                <h3 className="text-xl font-normal tracking-tight">
-                  {editingOrgMember ? 'Edit Data Pejabat / Pengelola' : 'Tambah Anggota Struktur'}
-                </h3>
-              </div>
-
-              <form onSubmit={handleSaveOrgMember} className="flex flex-col gap-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-2xl bg-white border border-[#C9A45A]/25">
-                  <div className="w-20 h-24 rounded-2xl bg-gradient-to-br from-[#EFE9DB] to-[#E2ECE5] border border-[#C9A45A]/35 overflow-hidden shrink-0 flex items-center justify-center">
-                    {orgFormPhotoUrl ? (
-                      <img
-                        src={orgFormPhotoUrl}
-                        alt="Pratinjau foto personal"
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover object-top"
-                      />
-                    ) : (
-                      <Icon icon="mdi:account-outline" className="w-8 h-8 text-[#164234]/50" />
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-2 flex-1 w-full">
-                    <label className="text-xs text-[#3E544B]">
-                      Foto Personal (Unggah ke MariaDB atau tempel URL)
-                    </label>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer transition-colors">
-                        <Icon icon="mdi:image-plus-outline" className="w-3.5 h-3.5 text-[#F4D993]" />
-                        <span>
-                          {uploadingOrgPhoto ? 'Mengunggah...' : 'Unggah Foto'}
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          disabled={uploadingOrgPhoto}
-                          onChange={(e) => void handleUploadOrgPhoto(e)}
-                          className="hidden"
-                        />
-                      </label>
-                      {orgFormPhotoUrl && (
-                        <button
-                          type="button"
-                          onClick={() => setOrgFormPhotoUrl('')}
-                          className="px-3 py-2 rounded-full bg-[#F6F3EC] text-[#9b2c2c] text-xs cursor-pointer"
-                        >
-                          Hapus Foto
-                        </button>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      value={orgFormPhotoUrl}
-                      onChange={(e) => setOrgFormPhotoUrl(e.target.value)}
-                      placeholder="/api/media/... atau https://..."
-                      className="px-3.5 py-2 rounded-xl bg-[#FAF8F3] border border-[#C9A45A]/25 text-xs text-[#164234] focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-[#3E544B]">Nama Lengkap & Gelar</label>
-                    <input
-                      type="text"
-                      required
-                      value={orgFormName}
-                      onChange={(e) => setOrgFormName(e.target.value)}
-                      placeholder="Contoh: Prof. Dr. Zakiyuddin, M.Ag."
-                      className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-[#3E544B]">Jabatan / Sebagai Apa</label>
-                    <input
-                      type="text"
-                      required
-                      value={orgFormPosition}
-                      onChange={(e) => setOrgFormPosition(e.target.value)}
-                      placeholder="Contoh: Rektor UIN Salatiga"
-                      className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-[#3E544B]">Tingkatan / Peran</label>
-                    <select
-                      value={orgFormTier}
-                      onChange={(e) =>
-                        setOrgFormTier(e.target.value as OrgMemberItem['tier'])
-                      }
-                      className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
-                    >
-                      <option value="rektor">Pimpinan Universitas (Rektor)</option>
-                      <option value="kepala_p2b">Kepala P2B</option>
-                      <option value="manajemen">Manajemen & Sekretariat</option>
-                      <option value="divisi">Koordinator Divisi</option>
-                    </select>
-                  </div>
-
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-[#3E544B]">Nomor Urut Tampil</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={orgFormSortOrder}
-                      onChange={(e) =>
-                        setOrgFormSortOrder(Math.max(1, Number(e.target.value) || 1))
-                      }
-                      className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-[#3E544B]">
-                    Deskripsi Tugas Singkat (Opsional)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={orgFormBio}
-                    onChange={(e) => setOrgFormBio(e.target.value)}
-                    placeholder="Ringkasan tanggung jawab atau ruang lingkup koordinasi..."
-                    className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none resize-none"
-                  />
-                </div>
-
-                <label className="inline-flex items-center gap-2.5 text-xs sm:text-sm text-[#164234] cursor-pointer w-fit">
-                  <input
-                    type="checkbox"
-                    checked={orgFormIsActive}
-                    onChange={(e) => setOrgFormIsActive(e.target.checked)}
-                    className="w-4 h-4 rounded accent-[#164234] cursor-pointer"
-                  />
-                  <span>Tampilkan pada halaman Struktur Organisasi publik</span>
-                </label>
-
-                {orgError && (
-                  <div className="px-4 py-2.5 rounded-2xl bg-[#9b2c2c]/10 border border-[#9b2c2c]/25 text-xs text-[#9b2c2c]">
-                    {orgError}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-end gap-2.5 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setOrgModalOpen(false)}
-                    className="px-4 py-2 rounded-full bg-[rgba(22,66,52,0.08)] text-[#164234] text-xs sm:text-sm cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={savingOrgMember || uploadingOrgPhoto}
-                    className="px-5 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs sm:text-sm cursor-pointer disabled:opacity-60"
-                  >
-                    {savingOrgMember ? 'Menyimpan...' : 'Simpan Anggota'}
                   </button>
                 </div>
               </form>

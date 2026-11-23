@@ -56,6 +56,14 @@ export function Navbar({
   const resolvedCtaTarget = settings?.header_cta_target?.trim() || '';
   const resolvedPhone = settings?.contact_phone?.trim() || '0811-2520-4371';
   const resolvedPhoneHref = `tel:${resolvedPhone.replace(/[^0-9+]/g, '').replace(/^0/, '+62')}`;
+  const resolvedWhatsapp = settings?.contact_whatsapp?.trim() || '0811-2520-4371';
+  const whatsappDigits = resolvedWhatsapp.replace(/[^0-9]/g, '');
+  const resolvedWhatsappIntl = whatsappDigits.startsWith('0')
+    ? `62${whatsappDigits.slice(1)}`
+    : whatsappDigits.startsWith('62')
+      ? whatsappDigits
+      : `62${whatsappDigits}`;
+  const resolvedWhatsappHref = `https://wa.me/${resolvedWhatsappIntl}`;
   const resolvedEmail = settings?.contact_email?.trim() || 'p2b@uinsalatiga.ac.id';
   const resolvedAddress =
     settings?.location_address?.trim() ||
@@ -508,13 +516,22 @@ export function Navbar({
 
                   {/* Official Institutional Contact Details */}
                   <div className="mb-6 rounded-2xl bg-white/80 border border-[#C9A45A]/25 p-4 flex flex-col gap-3 text-xs sm:text-sm text-[#164234]">
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2.5">
                       <a
                         href={resolvedPhoneHref}
                         className="inline-flex items-center gap-2 hover:text-[#8F6D26] transition-colors"
                       >
                         <Icon icon="mdi:phone-outline" className="w-4 h-4 text-[#8F6D26] shrink-0" />
                         <span>{resolvedPhone}</span>
+                      </a>
+                      <a
+                        href={resolvedWhatsappHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 hover:text-[#8F6D26] transition-colors"
+                      >
+                        <Icon icon="mdi:whatsapp" className="w-4 h-4 text-[#8F6D26] shrink-0" />
+                        <span>WhatsApp: {resolvedWhatsapp}</span>
                       </a>
                       <a
                         href={`mailto:${resolvedEmail}`}
@@ -530,11 +547,20 @@ export function Navbar({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end">
+                  <div className="flex flex-wrap items-center justify-end gap-2.5">
+                    <a
+                      href={resolvedWhatsappHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors"
+                    >
+                      <Icon icon="mdi:whatsapp" className="w-4 h-4 text-[#F4D993]" />
+                      <span>Chat WhatsApp</span>
+                    </a>
                     <button
                       type="button"
                       onClick={() => setActiveModal(null)}
-                      className="px-6 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] border border-[#C9A45A]/40 text-sm font-normal transition-colors cursor-pointer"
+                      className="px-6 py-2.5 rounded-full bg-[rgba(22,66,52,0.08)] hover:bg-[rgba(22,66,52,0.14)] text-[#164234] border border-[#C9A45A]/30 text-sm font-normal transition-colors cursor-pointer"
                     >
                       Tutup
                     </button>

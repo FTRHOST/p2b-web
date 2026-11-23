@@ -23,12 +23,10 @@ import { CmsLoginPage } from './components/CmsLoginPage';
 import { CmsDashboard } from './components/CmsDashboard';
 import { NotFoundPage } from './components/NotFoundPage';
 import { allNewsArticles, DEFAULT_NEWS_CATEGORIES, NewsArticle } from './data/news';
-import { defaultOrgMembers } from './data/orgMembers';
 import {
   CmsDatabaseInfo,
   CmsUser,
   NewsCategoryItem,
-  OrgMemberItem,
   PartnerLogoItem,
   SiteSettings,
 } from './types/cms';
@@ -104,7 +102,6 @@ export default function App() {
   const [newsCategories, setNewsCategories] = useState<NewsCategoryItem[]>(() =>
     DEFAULT_NEWS_CATEGORIES.map((name, idx) => ({ id: idx + 1, name, sortOrder: idx + 1 }))
   );
-  const [orgMembers, setOrgMembers] = useState<OrgMemberItem[]>(defaultOrgMembers);
   const [partnerLogos, setPartnerLogos] = useState<PartnerLogoItem[]>([
     {
       id: 1,
@@ -167,7 +164,6 @@ export default function App() {
         version?: string;
         news?: NewsArticle[];
         categories?: NewsCategoryItem[];
-        orgMembers?: OrgMemberItem[];
         partnerLogos?: PartnerLogoItem[];
         settings?: SiteSettings;
       };
@@ -180,9 +176,6 @@ export default function App() {
         }
         if (Array.isArray(data.categories) && data.categories.length > 0) {
           setNewsCategories(data.categories);
-        }
-        if (Array.isArray(data.orgMembers)) {
-          setOrgMembers(data.orgMembers);
         }
         if (Array.isArray(data.partnerLogos)) {
           setPartnerLogos(data.partnerLogos);
@@ -673,7 +666,6 @@ export default function App() {
         />
       ) : effectivePage === 'struktur-organisasi' ? (
         <StrukturOrganisasiPage
-          members={orgMembers}
           settings={siteSettings}
           onOpenAbout={() => navigateToPage('about')}
           onNavigateSection={navigateToSection}

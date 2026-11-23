@@ -8,6 +8,7 @@ export interface SiteSettings {
   about_p1?: string;
   about_p2?: string;
   contact_phone?: string;
+  contact_whatsapp?: string;
   contact_email?: string;
   location_address?: string;
   [key: string]: string | undefined;
@@ -68,17 +69,6 @@ export interface CmsMediaItem {
   sizeBytes: number;
   url: string;
   createdAt: string;
-}
-
-export interface OrgMemberItem {
-  id: number;
-  name: string;
-  positionTitle: string;
-  tier: 'rektor' | 'kepala_p2b' | 'manajemen' | 'divisi';
-  bio: string;
-  photoUrl: string;
-  sortOrder: number;
-  isActive: boolean;
 }
 
 export interface NewsCategoryItem {

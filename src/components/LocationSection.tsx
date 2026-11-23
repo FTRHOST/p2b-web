@@ -33,6 +33,14 @@ export function LocationSection({ settings }: LocationSectionProps) {
     `https://www.google.com/maps/search/?api=1&query=${coords[0]},${coords[1]}`;
   const resolvedPhone = settings?.contact_phone?.trim() || '0811-2520-4371';
   const resolvedPhoneHref = `tel:${resolvedPhone.replace(/[^0-9+]/g, '').replace(/^0/, '+62')}`;
+  const resolvedWhatsapp = settings?.contact_whatsapp?.trim() || '0811-2520-4371';
+  const whatsappDigits = resolvedWhatsapp.replace(/[^0-9]/g, '');
+  const resolvedWhatsappIntl = whatsappDigits.startsWith('0')
+    ? `62${whatsappDigits.slice(1)}`
+    : whatsappDigits.startsWith('62')
+      ? whatsappDigits
+      : `62${whatsappDigits}`;
+  const resolvedWhatsappHref = `https://wa.me/${resolvedWhatsappIntl}`;
   const resolvedEmail = settings?.contact_email?.trim() || 'p2b@uinsalatiga.ac.id';
   const resolvedAddress =
     settings?.location_address?.trim() ||
@@ -236,6 +244,15 @@ export function LocationSection({ settings }: LocationSectionProps) {
                 <span>{resolvedPhone}</span>
               </a>
               <a
+                href={resolvedWhatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 hover:text-[#8F6D26] transition-colors"
+              >
+                <Icon icon="mdi:whatsapp" className="w-3.5 h-3.5 text-[#8F6D26] shrink-0" />
+                <span>WhatsApp: {resolvedWhatsapp}</span>
+              </a>
+              <a
                 href={`mailto:${resolvedEmail}`}
                 className="inline-flex items-center gap-1.5 hover:text-[#8F6D26] transition-colors"
               >
@@ -257,7 +274,7 @@ export function LocationSection({ settings }: LocationSectionProps) {
               {resolvedAddress}
             </span>
             <span className="text-[11px] text-[#164234] pt-0.5">
-              {resolvedPhone} · {resolvedEmail}
+              {resolvedPhone} · WhatsApp {resolvedWhatsapp} · {resolvedEmail}
             </span>
           </div>
 

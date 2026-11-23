@@ -175,65 +175,6 @@ const SEED_NEWS = [
   },
 ];
 
-const SEED_ORG_MEMBERS = [
-  {
-    name: 'Rektor UIN Salatiga',
-    position_title: 'Rektor Universitas Islam Negeri Salatiga',
-    tier: 'rektor',
-    bio: 'Memberikan arahan kebijakan strategis, penetapan regulasi tarif PTN BLU, serta pengawasan kinerja pengembangan bisnis universitas.',
-    photo_url: '',
-    sort_order: 1,
-  },
-  {
-    name: 'Kepala Pusat Pengembangan Bisnis',
-    position_title: 'Kepala P2B UIN Salatiga',
-    tier: 'kepala_p2b',
-    bio: 'Memimpin perencanaan strategis, koordinasi lintas divisi, persetujuan kemitraan usaha, dan evaluasi portofolio bisnis PTN BLU.',
-    photo_url: '',
-    sort_order: 2,
-  },
-  {
-    name: 'Sekretaris P2B',
-    position_title: 'Sekretariat & Akuntabilitas BLU',
-    tier: 'manajemen',
-    bio: 'Mengelola administrasi kontrak sewa, pencatatan transaksi pendapatan usaha, kepatuhan prosedur, serta pelaporan akuntabel.',
-    photo_url: '',
-    sort_order: 3,
-  },
-  {
-    name: 'Koordinator Optimalisasi Aset',
-    position_title: 'Divisi Optimalisasi Aset & Fasilitas',
-    tier: 'divisi',
-    bio: 'Mengelola reservasi Gedung Auditorium Student Centre, ruang pertemuan, serta pemanfaatan aset fisik universitas.',
-    photo_url: '',
-    sort_order: 4,
-  },
-  {
-    name: 'Koordinator Layanan Komersial',
-    position_title: 'Divisi Layanan Komersial & Unit Usaha',
-    tier: 'divisi',
-    bio: 'Mengawasi operasional Klinik Mitra Insani, Kantin kampus higienis, produksi Air Mineral, serta layanan Tiket.',
-    photo_url: '',
-    sort_order: 5,
-  },
-  {
-    name: 'Koordinator Kemitraan & Pemasaran',
-    position_title: 'Divisi Kemitraan Strategis & Pemasaran',
-    tier: 'divisi',
-    bio: 'Membangun kolaborasi usaha dengan industri, pemerintah, alumni, dan pengelolaan komunikasi pemasaran layanan P2B.',
-    photo_url: '',
-    sort_order: 6,
-  },
-  {
-    name: 'Koordinator Talenta & Inovasi',
-    position_title: 'Divisi Talenta, Magang & Inovasi Mahasiswa',
-    tier: 'divisi',
-    bio: 'Mengelola program magang profesional mahasiswa bidang IT, komunikasi, pemasaran digital, bisnis, dan akuntansi.',
-    photo_url: '',
-    sort_order: 7,
-  },
-];
-
 const SEED_PARTNER_LOGOS = [
   {
     name: 'UIN Salatiga',
@@ -415,21 +356,7 @@ async function ensureDatabaseReady(): Promise<void> {
 
     await pool.query('DROP TABLE IF EXISTS cms_contact_messages');
     await pool.query('DROP TABLE IF EXISTS cms_newsletter_subscribers');
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS cms_org_members (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(160) NOT NULL,
-        position_title VARCHAR(160) NOT NULL,
-        tier VARCHAR(32) NOT NULL DEFAULT 'divisi',
-        bio TEXT NULL,
-        photo_url TEXT NOT NULL,
-        sort_order INT NOT NULL DEFAULT 100,
-        is_active TINYINT(1) NOT NULL DEFAULT 1,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
+    await pool.query('DROP TABLE IF EXISTS cms_org_members');
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cms_news_categories (
@@ -501,28 +428,6 @@ async function ensureDatabaseReady(): Promise<void> {
       }
     }
 
-    // Seed organizational structure members if empty
-    const [orgCountRows] = await pool.query<RowDataPacket[]>(
-      'SELECT COUNT(*) AS total FROM cms_org_members'
-    );
-    if (Number(orgCountRows[0]?.total || 0) === 0) {
-      for (const member of SEED_ORG_MEMBERS) {
-        await pool.query(
-          `INSERT INTO cms_org_members
-            (name, position_title, tier, bio, photo_url, sort_order, is_active)
-           VALUES (?, ?, ?, ?, ?, ?, 1)`,
-          [
-            member.name,
-            member.position_title,
-            member.tier,
-            member.bio,
-            member.photo_url,
-            member.sort_order,
-          ]
-        );
-      }
-    }
-
     // Seed news categories if empty and sync existing news categories
     const [catCountRows] = await pool.query<RowDataPacket[]>(
       'SELECT COUNT(*) AS total FROM cms_news_categories'
@@ -563,12 +468,9 @@ async function ensureDatabaseReady(): Promise<void> {
       }
     }
 
-    // Sync official clinic name "Klinik Mitra Insani" in seeded news & org members
+    // Sync official clinic name "Klinik Mitra Insani" in seeded news
     await pool.query(
       "UPDATE cms_news SET title = REPLACE(title, 'Klinik UIN SAGA', 'Klinik Mitra Insani'), excerpt = REPLACE(excerpt, 'Klinik UIN SAGA', 'Klinik Mitra Insani'), content_json = REPLACE(content_json, 'Klinik UIN SAGA', 'Klinik Mitra Insani') WHERE title LIKE '%Klinik UIN SAGA%' OR excerpt LIKE '%Klinik UIN SAGA%' OR content_json LIKE '%Klinik UIN SAGA%'"
-    );
-    await pool.query(
-      "UPDATE cms_org_members SET bio = REPLACE(bio, 'Klinik UIN SAGA', 'Klinik Mitra Insani') WHERE bio LIKE '%Klinik UIN SAGA%'"
     );
 
     dbReady = true;
@@ -670,28 +572,6 @@ function mapNewsRow(row: RowDataPacket) {
   };
 }
 
-function mapOrgMemberRow(row: RowDataPacket) {
-  const tierVal = String(row.tier || 'divisi');
-  const validTier =
-    tierVal === 'rektor' ||
-    tierVal === 'kepala_p2b' ||
-    tierVal === 'manajemen' ||
-    tierVal === 'divisi'
-      ? tierVal
-      : 'divisi';
-
-  return {
-    id: Number(row.id),
-    name: String(row.name),
-    positionTitle: String(row.position_title),
-    tier: validTier as 'rektor' | 'kepala_p2b' | 'manajemen' | 'divisi',
-    bio: row.bio ? String(row.bio) : '',
-    photoUrl: row.photo_url ? String(row.photo_url) : '',
-    sortOrder: Number(row.sort_order),
-    isActive: Boolean(row.is_active),
-  };
-}
-
 function mapPartnerLogoRow(row: RowDataPacket) {
   return {
     id: Number(row.id),
@@ -783,8 +663,6 @@ async function getPublicDataVersion(): Promise<{
         (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_news) AS news_ts,
         (SELECT COUNT(*) FROM cms_news_categories) AS cat_count,
         (SELECT COALESCE(MAX(created_at), '1970-01-01') FROM cms_news_categories) AS cat_ts,
-        (SELECT COUNT(*) FROM cms_org_members) AS org_count,
-        (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_org_members) AS org_ts,
         (SELECT COUNT(*) FROM cms_partner_logos) AS logo_count,
         (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_partner_logos) AS logo_ts,
         (SELECT COUNT(*) FROM cms_site_settings) AS settings_count,
@@ -797,8 +675,6 @@ async function getPublicDataVersion(): Promise<{
       r.news_ts,
       r.cat_count,
       r.cat_ts,
-      r.org_count,
-      r.org_ts,
       r.logo_count,
       r.logo_ts,
       r.settings_count,
@@ -821,7 +697,7 @@ async function getPublicDataVersion(): Promise<{
 }
 
 async function notifyCmsDataCommitted(
-  domain: 'news' | 'categories' | 'org' | 'logos' | 'media' | 'settings',
+  domain: 'news' | 'categories' | 'logos' | 'media' | 'settings',
   action: string,
   entityId?: string | number
 ): Promise<void> {
@@ -1361,9 +1237,6 @@ async function startServer() {
       const [newsRows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_news WHERE is_published = 1 ORDER BY sort_order ASC, id DESC'
       );
-      const [orgRows] = await pool.query<RowDataPacket[]>(
-        'SELECT * FROM cms_org_members WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
-      );
       const [categoryRows] = await pool.query<RowDataPacket[]>(
         'SELECT id, name, sort_order FROM cms_news_categories ORDER BY sort_order ASC, id ASC'
       );
@@ -1381,7 +1254,6 @@ async function startServer() {
         revision: versionInfo.revision,
         news: newsRows.map(mapNewsRow),
         settings,
-        orgMembers: orgRows.map(mapOrgMemberRow),
         partnerLogos: logoRows.map(mapPartnerLogoRow),
         categories: categoryRows.map((c) => ({
           id: Number(c.id),
@@ -2316,197 +2188,6 @@ async function startServer() {
       res.status(500).json({
         ok: false,
         message: err instanceof Error ? err.message : 'Gagal menghapus kategori.',
-      });
-    }
-  });
-
-  // CMS Organizational Structure CRUD & Reordering
-  app.get('/api/cms/org-members', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
-    try {
-      const [rows] = await pool.query<RowDataPacket[]>(
-        'SELECT * FROM cms_org_members ORDER BY sort_order ASC, id ASC'
-      );
-      res.json({ ok: true, items: rows.map(mapOrgMemberRow) });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal memuat struktur organisasi.',
-      });
-    }
-  });
-
-  app.post('/api/cms/org-members', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
-    const { name, positionTitle, tier, bio, photoUrl, sortOrder, isActive } = req.body as {
-      name?: string;
-      positionTitle?: string;
-      tier?: string;
-      bio?: string;
-      photoUrl?: string;
-      sortOrder?: number;
-      isActive?: boolean;
-    };
-
-    if (!name?.trim() || !positionTitle?.trim()) {
-      res.status(400).json({ ok: false, message: 'Nama lengkap dan jabatan wajib diisi.' });
-      return;
-    }
-
-    const cleanTier =
-      tier === 'rektor' || tier === 'kepala_p2b' || tier === 'manajemen' || tier === 'divisi'
-        ? tier
-        : 'divisi';
-
-    try {
-      let nextOrder = Number(sortOrder);
-      if (!Number.isFinite(nextOrder) || nextOrder <= 0) {
-        const [maxRows] = await pool.query<RowDataPacket[]>(
-          'SELECT COALESCE(MAX(sort_order), 0) AS maxOrder FROM cms_org_members'
-        );
-        nextOrder = Number(maxRows[0]?.maxOrder || 0) + 1;
-      }
-
-      const [result] = await pool.query<ResultSetHeader>(
-        `INSERT INTO cms_org_members (name, position_title, tier, bio, photo_url, sort_order, is_active)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          name.trim().slice(0, 160),
-          positionTitle.trim().slice(0, 160),
-          cleanTier,
-          (bio || '').trim().slice(0, 500) || null,
-          (photoUrl || '').trim(),
-          nextOrder,
-          isActive === false ? 0 : 1,
-        ]
-      );
-
-      const [inserted] = await pool.query<RowDataPacket[]>(
-        'SELECT * FROM cms_org_members WHERE id = ? LIMIT 1',
-        [result.insertId]
-      );
-      await notifyCmsDataCommitted('org', 'created', result.insertId);
-      res.status(201).json({ ok: true, item: mapOrgMemberRow(inserted[0]) });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal menambah anggota struktur organisasi.',
-      });
-    }
-  });
-
-  app.patch('/api/cms/org-members/reorder', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
-    const { orderedIds } = req.body as { orderedIds?: unknown[] };
-    const cleanIds = Array.isArray(orderedIds)
-      ? orderedIds.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
-      : [];
-
-    if (cleanIds.length === 0) {
-      res.status(400).json({ ok: false, message: 'Urutan ID anggota tidak valid.' });
-      return;
-    }
-
-    try {
-      const caseParts = cleanIds.map(() => 'WHEN ? THEN ?').join(' ');
-      const inPlaceholders = cleanIds.map(() => '?').join(', ');
-      const caseParams: number[] = [];
-      cleanIds.forEach((id, idx) => {
-        caseParams.push(id, idx + 1);
-      });
-      await pool.query(
-        `UPDATE cms_org_members SET sort_order = CASE id ${caseParts} ELSE sort_order END WHERE id IN (${inPlaceholders})`,
-        [...caseParams, ...cleanIds]
-      );
-      const [rows] = await pool.query<RowDataPacket[]>(
-        'SELECT * FROM cms_org_members ORDER BY sort_order ASC, id ASC'
-      );
-      await notifyCmsDataCommitted('org', 'reordered');
-      res.json({ ok: true, items: rows.map(mapOrgMemberRow) });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal menyimpan urutan struktur organisasi.',
-      });
-    }
-  });
-
-  app.put('/api/cms/org-members/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
-    const memberId = Number(req.params.id);
-    if (!Number.isFinite(memberId)) {
-      res.status(400).json({ ok: false, message: 'ID anggota tidak valid.' });
-      return;
-    }
-
-    const { name, positionTitle, tier, bio, photoUrl, sortOrder, isActive } = req.body as {
-      name?: string;
-      positionTitle?: string;
-      tier?: string;
-      bio?: string;
-      photoUrl?: string;
-      sortOrder?: number;
-      isActive?: boolean;
-    };
-
-    if (!name?.trim() || !positionTitle?.trim()) {
-      res.status(400).json({ ok: false, message: 'Nama lengkap dan jabatan wajib diisi.' });
-      return;
-    }
-
-    const cleanTier =
-      tier === 'rektor' || tier === 'kepala_p2b' || tier === 'manajemen' || tier === 'divisi'
-        ? tier
-        : 'divisi';
-    const orderNum = Number.isFinite(Number(sortOrder)) && Number(sortOrder) > 0
-      ? Number(sortOrder)
-      : 1;
-
-    try {
-      await pool.query(
-        `UPDATE cms_org_members
-         SET name = ?, position_title = ?, tier = ?, bio = ?, photo_url = ?, sort_order = ?, is_active = ?
-         WHERE id = ?`,
-        [
-          name.trim().slice(0, 160),
-          positionTitle.trim().slice(0, 160),
-          cleanTier,
-          (bio || '').trim().slice(0, 500) || null,
-          (photoUrl || '').trim(),
-          orderNum,
-          isActive === false ? 0 : 1,
-          memberId,
-        ]
-      );
-
-      const [updated] = await pool.query<RowDataPacket[]>(
-        'SELECT * FROM cms_org_members WHERE id = ? LIMIT 1',
-        [memberId]
-      );
-      if (updated.length === 0) {
-        res.status(404).json({ ok: false, message: 'Anggota tidak ditemukan.' });
-        return;
-      }
-      await notifyCmsDataCommitted('org', 'updated', memberId);
-      res.json({ ok: true, item: mapOrgMemberRow(updated[0]) });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal memperbarui anggota struktur.',
-      });
-    }
-  });
-
-  app.delete('/api/cms/org-members/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
-    const memberId = Number(req.params.id);
-    if (!Number.isFinite(memberId)) {
-      res.status(400).json({ ok: false, message: 'ID anggota tidak valid.' });
-      return;
-    }
-    try {
-      await pool.query('DELETE FROM cms_org_members WHERE id = ?', [memberId]);
-      await notifyCmsDataCommitted('org', 'deleted', memberId);
-      res.json({ ok: true });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Gagal menghapus anggota struktur.',
       });
     }
   });
