@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { motion } from 'motion/react';
 import { SiteSettings } from '../types/cms';
+import { ScrollWordTitle } from './ScrollWordTitle';
 
 const DEFAULT_COORDS: [number, number] = [-7.311415209978375, 110.47916197054059];
 const DEFAULT_ZOOM = 16;
@@ -152,27 +153,23 @@ export function LocationSection({ settings }: LocationSectionProps) {
     >
       <div className="w-full max-w-[1536px] flex flex-col gap-8 md:gap-10">
         {/* Header Row */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.7, ease: 'easeOut' }}
-          className="px-3 md:px-6 flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-12"
-        >
+        <div className="px-3 md:px-6 flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-12">
           <div className="flex flex-col gap-2">
             <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
               {settings?.location_eyebrow?.trim() || 'Lokasi Resmi'}
             </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-[56px] font-normal text-[#164234] tracking-tight leading-[1.06]">
-              {settings?.location_heading?.trim() || 'Peta & Lokasi P2B'}
-            </h2>
+            <ScrollWordTitle
+              as="h2"
+              text={settings?.location_heading?.trim() || 'Peta & Lokasi P2B'}
+              className="text-3xl sm:text-4xl md:text-5xl lg:text-[56px] font-normal text-[#164234] tracking-tight leading-[1.06]"
+            />
           </div>
 
           <p className="text-sm sm:text-base md:text-lg text-[#3E544B] leading-relaxed max-w-xl font-normal">
             {settings?.location_description?.trim() ||
               'Kunjungi kantor P2B UIN Salatiga di Gedung Auditorium & Student Center Prof. Dr. H. Achmadi untuk konsultasi sewa aset, kemitraan usaha, dan layanan komersial.'}
           </p>
-        </motion.div>
+        </div>
 
         {/* Rounded Leaflet Map Container matching Hero aesthetic */}
         <motion.div
@@ -228,10 +225,16 @@ export function LocationSection({ settings }: LocationSectionProps) {
             <span className="text-[11px] text-[#8F6D26] uppercase tracking-wider">
               {settings?.location_card_label?.trim() || 'Alamat Kantor P2B'}
             </span>
-            <h3 className="text-base md:text-lg font-normal text-[#164234] leading-snug">
-              {settings?.location_card_title?.trim() ||
-                'Gedung Auditorium & Student Center Prof. Dr. H. Achmadi'}
-            </h3>
+            <ScrollWordTitle
+              as="h3"
+              text={
+                settings?.location_card_title?.trim() ||
+                'Gedung Auditorium & Student Center Prof. Dr. H. Achmadi'
+              }
+              start="top 94%"
+              duration={0.55}
+              className="text-base md:text-lg font-normal text-[#164234] leading-snug"
+            />
             <p className="text-xs text-[#2B4339] leading-relaxed">
               {resolvedAddress}
             </p>

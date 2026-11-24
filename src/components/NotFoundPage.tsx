@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { BottomRightCorner } from './BottomRightCorner';
 import { Footer } from './Footer';
 import { SiteSettings } from '../types/cms';
+import { ScrollWordTitle } from './ScrollWordTitle';
 
 interface NotFoundPageProps {
   path?: string;
@@ -76,9 +77,12 @@ export function NotFoundPage({
                 404
               </div>
 
-              <h1 className="text-3xl sm:text-5xl md:text-[56px] font-normal text-[#FAF8F3] drop-shadow-sm mb-3 tracking-tight leading-[1.08] text-balance">
-                Halaman Tidak Ditemukan
-              </h1>
+              <ScrollWordTitle
+                as="h1"
+                text="Halaman Tidak Ditemukan"
+                start="top 95%"
+                className="text-3xl sm:text-5xl md:text-[56px] font-normal text-[#FAF8F3] drop-shadow-sm mb-3 tracking-tight leading-[1.08] text-balance"
+              />
 
               <p className="text-sm sm:text-base md:text-lg text-[#F6F3EC]/90 leading-relaxed max-w-2xl font-normal mb-7">
                 Maaf, alamat yang Anda tuju

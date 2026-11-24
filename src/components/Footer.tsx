@@ -128,6 +128,7 @@ const profileLinks = [
   { label: 'Tentang Kami', path: '/tentang-kami' },
   { label: 'Visi & Misi', path: '/visi-misi' },
   { label: 'Struktur Organisasi', path: '/struktur-organisasi' },
+  { label: 'Magang di P2B', path: '/magang' },
   { label: 'Semua Berita', path: '/semua-berita' },
 ];
 
@@ -157,6 +158,8 @@ export function Footer({ settings, onNavigate }: FooterProps) {
   const resolvedSocialLabel = settings?.footer_social_label?.trim() || 'Instagram';
   const resolvedSocialUrl =
     settings?.footer_social_url?.trim() || 'https://www.instagram.com/p2b.uinsalatiga';
+  const resolvedTiktokUrl =
+    settings?.footer_tiktok_url?.trim() || 'https://www.tiktok.com/@p2b.uin.salatiga';
   const resolvedMapsUrl =
     settings?.location_maps_url?.trim() ||
     'https://www.google.com/maps/search/?api=1&query=-7.311415209978375,110.47916197054059';
@@ -318,6 +321,22 @@ export function Footer({ settings, onNavigate }: FooterProps) {
                 >
                   <span className="block opacity-65 transition-opacity duration-300 group-hover:opacity-100">
                     <Icon icon="mdi:instagram" className="w-8 h-8 text-white" />
+                  </span>
+                </a>
+              </li>
+
+              {/* TikTok */}
+              <li>
+                <a
+                  title="TikTok"
+                  aria-label="Ikuti P2B UIN Salatiga di TikTok"
+                  className="group block size-14 border-b-[3px] border-neutral-800 p-3 opacity-80 transition-all duration-300 ease-in-out hover:rounded-2xl hover:bg-neutral-800 hover:opacity-100"
+                  href={resolvedTiktokUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span className="block opacity-65 transition-opacity duration-300 group-hover:opacity-100">
+                    <Icon icon="mdi:tiktok" className="w-8 h-8 text-white" />
                   </span>
                 </a>
               </li>

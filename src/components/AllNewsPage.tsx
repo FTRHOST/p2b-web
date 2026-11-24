@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@iconify/react';
 import { motion } from 'motion/react';
+import { ScrollTrigger } from '../lib/gsap';
 import {
   allNewsArticles,
   DEFAULT_NEWS_CATEGORIES,
@@ -90,6 +91,13 @@ export function AllNewsPage({
     startIndex + ITEMS_PER_PAGE
   );
   const pageNumbers = getPageNumbers(safePage, totalPages);
+
+  useEffect(() => {
+    const rafId = window.requestAnimationFrame(() => {
+      ScrollTrigger.refresh();
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [safeActiveCategory, normalizedQuery, safePage, filteredArticles.length]);
 
   const handleCategoryChange = (category: NewsCategory) => {
     setActiveCategory(category);

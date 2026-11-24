@@ -1,9 +1,9 @@
 import { Icon } from '@iconify/react';
-import { motion } from 'motion/react';
 import { PageHero } from './PageHero';
 import { Footer } from './Footer';
 import { CardCornerPattern } from './CardCornerPattern';
 import { VisiCard } from './VisiCard';
+import { ScrollWordTitle } from './ScrollWordTitle';
 
 import { SiteSettings } from '../types/cms';
 
@@ -77,22 +77,18 @@ export function VisiMisiPage({
           <VisiCard settings={settings} />
 
           {/* Misi Strategis Grid */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.15 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="flex flex-col gap-6"
-          >
+          <section className="flex flex-col gap-6">
             <div className="px-3 md:px-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs uppercase tracking-wider text-[#8F6D26] inline-flex items-center gap-1.5">
                   <Icon icon="mdi:target" className="w-3.5 h-3.5" />
                   <span>Misi P2B</span>
                 </span>
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight">
-                  Lima Fokus Misi Pengembangan Bisnis
-                </h2>
+                <ScrollWordTitle
+                  as="h2"
+                  text="Lima Fokus Misi Pengembangan Bisnis"
+                  className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight"
+                />
               </div>
 
               <p className="text-sm sm:text-base text-[#3E544B] max-w-md leading-relaxed">
@@ -115,16 +111,20 @@ export function VisiMisiPage({
                   <span className="relative z-10 text-xs font-normal tracking-widest text-[#8F6D26] tabular-nums">
                     MISI {misi.number}
                   </span>
-                  <h3 className="relative z-10 text-xl font-normal text-[#164234] tracking-tight leading-snug">
-                    {misi.title}
-                  </h3>
+                  <ScrollWordTitle
+                    as="h3"
+                    text={misi.title}
+                    start="top 92%"
+                    duration={0.58}
+                    className="relative z-10 text-xl font-normal text-[#164234] tracking-tight leading-snug"
+                  />
                   <p className="relative z-10 text-sm md:text-base text-[#3E544B] leading-relaxed">
                     {misi.description}
                   </p>
                 </div>
               ))}
             </div>
-          </motion.section>
+          </section>
         </div>
       </main>
 

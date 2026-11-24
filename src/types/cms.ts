@@ -87,4 +87,49 @@ export interface PartnerLogoItem {
   isActive: boolean;
 }
 
+export interface MagangGalleryItem {
+  id: number;
+  title: string;
+  caption: string;
+  imageUrl: string;
+  altText: string;
+  sortOrder: number;
+  isActive: boolean;
+}
 
+export interface MagangPositionItem {
+  id: number;
+  title: string;
+  division: string;
+  description: string;
+  imageUrl: string;
+  tasks: string[];
+  sortOrder: number;
+  isActive: boolean;
+  isAvailable: boolean;
+}
+
+export type MagangApplicationStatus = 'baru' | 'ditinjau' | 'diterima' | 'ditolak';
+
+export interface MagangApplicationItem {
+  id: number;
+  registrationCode: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  studyProgram: string;
+  faculty: string;
+  aboutP2b: string;
+  positionId: number | null;
+  positionTitle: string;
+  interestReason: string;
+  resumeFileId: string | null;
+  resumeFileName: string | null;
+  resumeUrl: string | null;
+  portfolioFileId: string | null;
+  portfolioFileName: string | null;
+  portfolioUrl: string | null;
+  expectations: string;
+  status: MagangApplicationStatus;
+  createdAt: string;
+}

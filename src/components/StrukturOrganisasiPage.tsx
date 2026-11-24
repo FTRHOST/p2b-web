@@ -1,9 +1,9 @@
 import { Icon } from '@iconify/react';
-import { motion } from 'motion/react';
 import { PageHero } from './PageHero';
 import { Footer } from './Footer';
 import { CardCornerPattern } from './CardCornerPattern';
 import { SiteSettings } from '../types/cms';
+import { ScrollWordTitle } from './ScrollWordTitle';
 
 interface StrukturOrganisasiPageProps {
   settings?: SiteSettings;
@@ -123,20 +123,16 @@ export function StrukturOrganisasiPage({
       <main className="w-full flex justify-center px-3 md:px-5 pt-10 md:pt-14 pb-12 md:pb-20 flex-1">
         <div className="w-full max-w-[1536px] flex flex-col gap-10 md:gap-14">
           {/* Official Static SK 56/2026 Org Chart Diagram */}
-          <motion.section
-            initial={{ opacity: 0, y: 18 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.08 }}
-            transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-            className="flex flex-col gap-6 px-1 sm:px-3 md:px-6"
-          >
+          <section className="flex flex-col gap-6 px-1 sm:px-3 md:px-6">
             <div className="flex flex-col gap-1.5 text-center items-center max-w-3xl mx-auto">
               <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
                 Lampiran Keputusan Rektor Nomor 56 Tahun 2026
               </span>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight uppercase">
-                Struktur Organisasi Pusat Pengembangan Bisnis
-              </h2>
+              <ScrollWordTitle
+                as="h2"
+                text="Struktur Organisasi Pusat Pengembangan Bisnis"
+                className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight uppercase"
+              />
             </div>
 
             {/* Chart Architectural Canvas */}
@@ -452,23 +448,19 @@ export function StrukturOrganisasiPage({
                 </div>
               </div>
             </div>
-          </motion.section>
+          </section>
 
           {/* 4 Operational Business Units Overview */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.15 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="flex flex-col gap-6"
-          >
+          <section className="flex flex-col gap-6">
             <div className="px-3 md:px-6 flex flex-col gap-1.5">
               <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
                 Diktum Kedua · Pengembangan Unit Bisnis
               </span>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight">
-                Ruang Lingkup Layanan & Unit Usaha P2B
-              </h2>
+              <ScrollWordTitle
+                as="h2"
+                text="Ruang Lingkup Layanan & Unit Usaha P2B"
+                className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight"
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
@@ -492,9 +484,13 @@ export function StrukturOrganisasiPage({
                     </span>
                   </div>
 
-                  <h3 className="relative z-10 text-xl font-normal text-[#164234] tracking-tight">
-                    {div.title}
-                  </h3>
+                  <ScrollWordTitle
+                    as="h3"
+                    text={div.title}
+                    start="top 92%"
+                    duration={0.58}
+                    className="relative z-10 text-xl font-normal text-[#164234] tracking-tight"
+                  />
 
                   <ul className="relative z-10 flex flex-col gap-2 text-sm text-[#3E544B] leading-relaxed">
                     {div.responsibilities.map((item) => (
@@ -509,7 +505,7 @@ export function StrukturOrganisasiPage({
                 </div>
               ))}
             </div>
-          </motion.section>
+          </section>
         </div>
       </main>
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Icon } from '@iconify/react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SiteSettings } from '../types/cms';
+import { ScrollWordTitle } from './ScrollWordTitle';
 
 interface FocusCardData {
   id: string;
@@ -85,27 +86,29 @@ export function WhoWeAre({ settings, onNavigateTarget }: WhoWeAreProps) {
     >
       <div className="w-full max-w-[1536px] flex flex-col gap-10 md:gap-14">
         {/* Intro Header & Tentang P2B */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.25 }}
-          transition={{ duration: 0.7, ease: 'easeOut' }}
-          className="px-3 md:px-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-start"
-        >
+        <div className="px-3 md:px-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-start">
           <div className="lg:col-span-5 flex flex-col gap-2">
             <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
               {settings?.about_eyebrow?.trim() || DEFAULT_EYEBROW}
             </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-[52px] font-normal text-[#164234] tracking-tight leading-[1.08]">
-              {settings?.about_heading?.trim() || DEFAULT_HEADING}
-            </h2>
+            <ScrollWordTitle
+              as="h2"
+              text={settings?.about_heading?.trim() || DEFAULT_HEADING}
+              className="text-3xl sm:text-4xl md:text-5xl lg:text-[52px] font-normal text-[#164234] tracking-tight leading-[1.08]"
+            />
           </div>
 
-          <div className="lg:col-span-7 flex flex-col gap-4 text-sm sm:text-base text-[#3E544B] leading-relaxed font-normal">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="lg:col-span-7 flex flex-col gap-4 text-sm sm:text-base text-[#3E544B] leading-relaxed font-normal"
+          >
             <p>{settings?.about_p1?.trim() || DEFAULT_P1}</p>
             <p>{settings?.about_p2?.trim() || DEFAULT_P2}</p>
-          </div>
-        </motion.div>
+          </motion.div>
+        </div>
 
         {/* 2 Featured Product/Service Cards matching Hero architecture */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
@@ -182,9 +185,13 @@ export function WhoWeAre({ settings, onNavigateTarget }: WhoWeAreProps) {
                   </div>
 
                   <div className="flex flex-col pr-1">
-                    <span className="text-[14px] md:text-[17px] font-normal text-[#164234] whitespace-nowrap">
-                      {card.title}
-                    </span>
+                    <ScrollWordTitle
+                      as="span"
+                      text={card.title}
+                      start="top 94%"
+                      duration={0.55}
+                      className="text-[14px] md:text-[17px] font-normal text-[#164234] whitespace-nowrap"
+                    />
                     <div className="flex items-center gap-0.5 text-[#8F6D26] group-hover:text-[#164234] transition-colors">
                       <span className="text-[11px] md:text-[13px] font-normal whitespace-nowrap">
                         {card.linkLabel}

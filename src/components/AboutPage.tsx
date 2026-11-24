@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { PageHero } from './PageHero';
 import { Footer } from './Footer';
 import { CardCornerPattern } from './CardCornerPattern';
+import { ScrollWordTitle } from './ScrollWordTitle';
 
 import { SiteSettings } from '../types/cms';
 
@@ -108,10 +109,14 @@ export function AboutPage({
               <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
                 Profil Kelembagaan · PTN BLU
               </span>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight leading-[1.12]">
-                {settings?.page_about_intro_heading?.trim() ||
-                  'Mengenal Pusat Pengembangan Bisnis (P2B) UIN Salatiga'}
-              </h2>
+              <ScrollWordTitle
+                as="h2"
+                text={
+                  settings?.page_about_intro_heading?.trim() ||
+                  'Mengenal Pusat Pengembangan Bisnis (P2B) UIN Salatiga'
+                }
+                className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight leading-[1.12]"
+              />
             </div>
 
             <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10 text-sm sm:text-base md:text-[17px] text-[#3E544B] leading-relaxed">
@@ -172,20 +177,16 @@ export function AboutPage({
           </motion.section>
 
           {/* Governance & Ecosystem Values */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="flex flex-col gap-6"
-          >
+          <section className="flex flex-col gap-6">
             <div className="px-3 md:px-6 flex flex-col gap-1.5">
               <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
                 Prinsip &amp; Tata Kelola
               </span>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight">
-                Nilai Pengelolaan Bisnis Universitas
-              </h2>
+              <ScrollWordTitle
+                as="h2"
+                text="Nilai Pengelolaan Bisnis Universitas"
+                className="text-2xl sm:text-3xl md:text-4xl font-normal text-[#164234] tracking-tight"
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
@@ -218,9 +219,13 @@ export function AboutPage({
                   </div>
 
                   <div className="relative z-10 mt-6 mb-7 text-left">
-                    <h3 className="text-xl sm:text-2xl font-normal text-[#164234] tracking-tight leading-snug">
-                      {item.title}
-                    </h3>
+                    <ScrollWordTitle
+                      as="h3"
+                      text={item.title}
+                      start="top 92%"
+                      duration={0.58}
+                      className="text-xl sm:text-2xl font-normal text-[#164234] tracking-tight leading-snug"
+                    />
                     <p className="mt-2.5 text-sm sm:text-[15px] text-[#3E544B] leading-relaxed max-w-xl">
                       {item.description}
                     </p>
@@ -253,7 +258,7 @@ export function AboutPage({
                 </div>
               ))}
             </div>
-          </motion.section>
+          </section>
         </div>
       </main>
 

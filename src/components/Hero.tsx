@@ -1,11 +1,7 @@
-import { useRef, useState } from 'react';
-import {
-  motion,
-  useScroll,
-  useTransform,
-  useReducedMotion,
-} from 'motion/react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { gsap } from '../lib/gsap';
 import { BottomRightCorner } from './BottomRightCorner';
+import { ScrollWordTitle } from './ScrollWordTitle';
 
 interface HeroProps {
   onOpenAbout?: () => void;
@@ -33,104 +29,108 @@ export function Hero({
   cornerHref,
 }: HeroProps) {
   const heroRef = useRef<HTMLDivElement | null>(null);
-  const prefersReducedMotion = useReducedMotion();
+  const bgParallaxRef = useRef<HTMLDivElement | null>(null);
+  const contentParallaxRef = useRef<HTMLDivElement | null>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const resolvedImage = imageUrl?.trim() || DEFAULT_HERO_IMAGE;
   const bgFailed = failedUrl === resolvedImage;
 
-  const { scrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ['start start', 'end start'],
-  });
+  useLayoutEffect(() => {
+    const heroEl = heroRef.current;
+    if (!heroEl) return;
 
-  const bgY = useTransform(scrollYProgress, [0, 1], prefersReducedMotion ? [0, 0] : [0, 48]);
-  const bgScale = useTransform(scrollYProgress, [0, 1], prefersReducedMotion ? [1, 1] : [1, 1.06]);
-  const contentY = useTransform(scrollYProgress, [0, 1], prefersReducedMotion ? [0, 0] : [0, 36]);
-  const contentOpacity = useTransform(scrollYProgress, [0, 0.85], prefersReducedMotion ? [1, 1] : [1, 0.15]);
+    const ctx = gsap.context(() => {
+      const mm = gsap.matchMedia();
+
+      mm.add('(prefers-reduced-motion: no-preference)', () => {
+        if (bgParallaxRef.current) {
+          gsap.fromTo(
+            bgParallaxRef.current,
+            { y: 0, scale: 1 },
+            {
+              y: 52,
+              scale: 1.07,
+              ease: 'none',
+              scrollTrigger: {
+                trigger: heroEl,
+                start: 'top top',
+                end: 'bottom top',
+                scrub: true,
+              },
+            }
+          );
+        }
+
+        if (contentParallaxRef.current) {
+          gsap.fromTo(
+            contentParallaxRef.current,
+            { y: 0, opacity: 1 },
+            {
+              y: 38,
+              opacity: 0.15,
+              ease: 'none',
+              scrollTrigger: {
+                trigger: heroEl,
+                start: 'top top',
+                end: 'bottom 15%',
+                scrub: true,
+              },
+            }
+          );
+        }
+      });
+
+      return () => mm.revert();
+    }, heroEl);
+
+    return () => ctx.revert();
+  }, [bgFailed]);
 
   return (
     <div
       ref={heroRef}
       className="w-full h-screen flex items-center justify-center p-3 md:p-5 bg-[#F6F3EC]"
     >
-      <motion.section
-        initial={{ opacity: 0, scale: 0.99 }}
-        whileInView={{ opacity: 1, scale: 1 }}
-        viewport={{ once: true, amount: 0.05 }}
-        transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[1536px] h-full rounded-[1.5rem] md:rounded-[3rem] overflow-hidden shadow-none flex flex-col items-center justify-center bg-white/20 border border-[#C9A45A]/20 group"
-      >
+      <section className="relative w-full max-w-[1536px] h-full rounded-[1.5rem] md:rounded-[3rem] overflow-hidden shadow-none flex flex-col items-center justify-center bg-white/20 border border-[#C9A45A]/20 group">
         {/* Fallback backdrop if image fails to load */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#0B261D] via-[#164234] to-[#1E5644] z-0" />
 
         {!bgFailed && (
-          <motion.div
-            style={{ y: bgY, scale: bgScale }}
+          <div
+            ref={bgParallaxRef}
             className="absolute inset-0 w-full h-full z-0 will-change-transform"
           >
-            <motion.img
-              initial={{ opacity: 0, scale: 1.05 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true, amount: 0.05 }}
-              transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+            <img
               src={resolvedImage}
               alt="Auditorium Student Centre UIN Salatiga"
               referrerPolicy="no-referrer"
               onError={() => setFailedUrl(resolvedImage)}
               className="w-full h-full object-cover object-[65%] lg:object-center"
             />
-          </motion.div>
+          </div>
         )}
 
         {/* Deep emerald green gradient scrim for high-contrast white/cream typography */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#0A241B]/90 via-[#164234]/68 to-[#164234]/28 z-0 pointer-events-none" />
 
         <div className="relative z-10 w-full h-full flex flex-col items-center justify-center px-6 pt-16 md:pt-20 pb-12">
-          <motion.div
-            style={{ y: contentY, opacity: contentOpacity }}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.1 }}
-            variants={{
-              hidden: {},
-              visible: {
-                transition: {
-                  staggerChildren: 0.12,
-                  delayChildren: 0.08,
-                },
-              },
-            }}
+          <div
+            ref={contentParallaxRef}
             className="w-full flex flex-col items-center text-center max-w-4xl will-change-transform"
           >
-            <motion.h1
-              variants={{
-                hidden: { opacity: 0, y: 24, scale: 0.98 },
-                visible: {
-                  opacity: 1,
-                  y: 0,
-                  scale: 1,
-                  transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-                },
-              }}
+            <ScrollWordTitle
+              as="h1"
+              text={title?.trim() || DEFAULT_HERO_TITLE}
+              start="top 95%"
+              stagger={0.08}
+              duration={0.78}
               className="text-4xl sm:text-5xl md:text-6xl lg:text-[74px] font-normal text-[#FAF8F3] drop-shadow-sm mb-3 tracking-tight leading-[1.06] text-balance"
-            >
-              {title?.trim() || DEFAULT_HERO_TITLE}
-            </motion.h1>
+            />
 
-            <motion.p
-              variants={{
-                hidden: { opacity: 0, y: 18 },
-                visible: {
-                  opacity: 1,
-                  y: 0,
-                  transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-                },
-              }}
-              className="text-sm sm:text-base md:text-lg text-[#F6F3EC]/90 leading-relaxed max-w-2xl font-normal"
-            >
+            <p className="text-sm sm:text-base md:text-lg text-[#F6F3EC]/90 leading-relaxed max-w-2xl font-normal">
               {subtitle?.trim() || DEFAULT_HERO_SUBTITLE}
-            </motion.p>
-          </motion.div>
+            </p>
+          </div>
 
           <BottomRightCorner
             label={cornerLabel?.trim() || 'Profil P2B'}
@@ -139,7 +139,7 @@ export function Hero({
             onOpenProfile={onOpenAbout}
           />
         </div>
-      </motion.section>
+      </section>
     </div>
   );
 }

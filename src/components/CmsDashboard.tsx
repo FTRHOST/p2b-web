@@ -8,6 +8,10 @@ import {
   CmsStats,
   CmsUploadedMedia,
   CmsUser,
+  MagangApplicationItem,
+  MagangApplicationStatus,
+  MagangGalleryItem,
+  MagangPositionItem,
   NewsCategoryItem,
   PartnerLogoItem,
   SiteSettings,
@@ -18,6 +22,7 @@ import {
   NewsAttachment,
   NewsGalleryItem,
 } from '../data/news';
+import { DEFAULT_MAGANG_HERO_IMAGE } from '../data/magangDefaults';
 import { TinyMceEditor } from './TinyMceEditor';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
@@ -74,6 +79,7 @@ type CmsTab =
   | 'news'
   | 'media'
   | 'logos'
+  | 'magang'
   | 'settings'
   | 'security';
 
@@ -183,11 +189,56 @@ export function CmsDashboard({
   const [logoError, setLogoError] = useState('');
   const [confirmDeleteLogoId, setConfirmDeleteLogoId] = useState<number | null>(null);
 
+  // Magang P2B Gallery & Positions State
+  const [magangGallery, setMagangGallery] = useState<MagangGalleryItem[]>([]);
+  const [galleryModalOpen, setGalleryModalOpen] = useState(false);
+  const [editingGalleryItem, setEditingGalleryItem] = useState<MagangGalleryItem | null>(null);
+  const [galleryFormTitle, setGalleryFormTitle] = useState('');
+  const [galleryFormCaption, setGalleryFormCaption] = useState('');
+  const [galleryFormImageUrl, setGalleryFormImageUrl] = useState('');
+  const [galleryFormAltText, setGalleryFormAltText] = useState('');
+  const [galleryFormSortOrder, setGalleryFormSortOrder] = useState(1);
+  const [galleryFormIsActive, setGalleryFormIsActive] = useState(true);
+  const [uploadingGalleryFile, setUploadingGalleryFile] = useState(false);
+  const [savingGalleryItem, setSavingGalleryItem] = useState(false);
+  const [savingGalleryOrder, setSavingGalleryOrder] = useState(false);
+  const [galleryOrderDirty, setGalleryOrderDirty] = useState(false);
+  const [galleryError, setGalleryError] = useState('');
+  const [confirmDeleteGalleryId, setConfirmDeleteGalleryId] = useState<number | null>(null);
+
+  const [magangPositions, setMagangPositions] = useState<MagangPositionItem[]>([]);
+  const [positionModalOpen, setPositionModalOpen] = useState(false);
+  const [editingPositionItem, setEditingPositionItem] = useState<MagangPositionItem | null>(null);
+  const [posFormTitle, setPosFormTitle] = useState('');
+  const [posFormDivision, setPosFormDivision] = useState('');
+  const [posFormDescription, setPosFormDescription] = useState('');
+  const [posFormImageUrl, setPosFormImageUrl] = useState('');
+  const [posFormTasksText, setPosFormTasksText] = useState('');
+  const [posFormSortOrder, setPosFormSortOrder] = useState(1);
+  const [posFormIsActive, setPosFormIsActive] = useState(true);
+  const [posFormIsAvailable, setPosFormIsAvailable] = useState(true);
+  const [uploadingPosFile, setUploadingPosFile] = useState(false);
+  const [savingPositionItem, setSavingPositionItem] = useState(false);
+  const [savingPosOrder, setSavingPosOrder] = useState(false);
+  const [posOrderDirty, setPosOrderDirty] = useState(false);
+  const [positionError, setPositionError] = useState('');
+  const [confirmDeletePositionId, setConfirmDeletePositionId] = useState<number | null>(null);
+
+  // Magang Applications Inbox State
+  const [magangApplications, setMagangApplications] = useState<MagangApplicationItem[]>([]);
+  const [appStatusFilter, setAppStatusFilter] = useState<'all' | MagangApplicationStatus>('all');
+  const [appSearch, setAppSearch] = useState('');
+  const [selectedApplicant, setSelectedApplicant] = useState<MagangApplicationItem | null>(null);
+  const [updatingAppStatusId, setUpdatingAppStatusId] = useState<number | null>(null);
+  const [confirmDeleteAppId, setConfirmDeleteAppId] = useState<number | null>(null);
+  const [downloadingFileKey, setDownloadingFileKey] = useState<string | null>(null);
+
   // Site Settings State
   const [settingsForm, setSettingsForm] = useState<SiteSettings>({});
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [uploadingHeroBg, setUploadingHeroBg] = useState(false);
+  const [uploadingMagangHero, setUploadingMagangHero] = useState(false);
   const [settingsError, setSettingsError] = useState('');
 
   // Password form state
@@ -201,11 +252,21 @@ export function CmsDashboard({
 
   const lastLocalCommitAtRef = useRef<number>(0);
   const logoOrderDirtyRef = useRef(false);
+  const magangGalleryOrderDirtyRef = useRef(false);
+  const magangPosOrderDirtyRef = useRef(false);
   const settingsDirtyRef = useRef(false);
 
   useEffect(() => {
     logoOrderDirtyRef.current = logoOrderDirty;
   }, [logoOrderDirty]);
+
+  useEffect(() => {
+    magangGalleryOrderDirtyRef.current = galleryOrderDirty;
+  }, [galleryOrderDirty]);
+
+  useEffect(() => {
+    magangPosOrderDirtyRef.current = posOrderDirty;
+  }, [posOrderDirty]);
 
   useEffect(() => {
     settingsDirtyRef.current = settingsDirty;
@@ -232,39 +293,63 @@ export function CmsDashboard({
     async (options?: { preserveDirtyEdits?: boolean }) => {
       const preserveDirty = Boolean(options?.preserveDirtyEdits);
       try {
-        const [ovRes, newsRes, catRes, mediaRes, logoRes, settingsRes] =
-          await Promise.all([
-            fetch('/api/cms/overview', {
-              headers: authHeaders(),
-              credentials: 'include',
-              cache: 'no-store',
-            }),
-            fetch('/api/cms/news', {
-              headers: authHeaders(),
-              credentials: 'include',
-              cache: 'no-store',
-            }),
-            fetch('/api/cms/categories', {
-              headers: authHeaders(),
-              credentials: 'include',
-              cache: 'no-store',
-            }),
-            fetch('/api/cms/media', {
-              headers: authHeaders(),
-              credentials: 'include',
-              cache: 'no-store',
-            }),
-            fetch('/api/cms/partner-logos', {
-              headers: authHeaders(),
-              credentials: 'include',
-              cache: 'no-store',
-            }),
-            fetch('/api/cms/settings', {
-              headers: authHeaders(),
-              credentials: 'include',
-              cache: 'no-store',
-            }),
-          ]);
+        const [
+          ovRes,
+          newsRes,
+          catRes,
+          mediaRes,
+          logoRes,
+          magangGalleryRes,
+          magangPosRes,
+          magangAppRes,
+          settingsRes,
+        ] = await Promise.all([
+          fetch('/api/cms/overview', {
+            headers: authHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
+          }),
+          fetch('/api/cms/news', {
+            headers: authHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
+          }),
+          fetch('/api/cms/categories', {
+            headers: authHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
+          }),
+          fetch('/api/cms/media', {
+            headers: authHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
+          }),
+          fetch('/api/cms/partner-logos', {
+            headers: authHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
+          }),
+          fetch('/api/cms/magang-gallery', {
+            headers: authHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
+          }),
+          fetch('/api/cms/magang-positions', {
+            headers: authHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
+          }),
+          fetch('/api/cms/magang-applications', {
+            headers: authHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
+          }),
+          fetch('/api/cms/settings', {
+            headers: authHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
+          }),
+        ]);
 
         if (ovRes.ok) {
           const d = (await ovRes.json()) as { stats?: CmsStats };
@@ -287,6 +372,38 @@ export function CmsDashboard({
           if (d.items) {
             setPartnerLogos(d.items);
             setLogoOrderDirty(false);
+          }
+        }
+        if (
+          magangGalleryRes.ok &&
+          (!preserveDirty || !magangGalleryOrderDirtyRef.current)
+        ) {
+          const d = (await magangGalleryRes.json()) as {
+            items?: MagangGalleryItem[];
+          };
+          if (d.items) {
+            setMagangGallery(d.items);
+            setGalleryOrderDirty(false);
+          }
+        }
+        if (
+          magangPosRes.ok &&
+          (!preserveDirty || !magangPosOrderDirtyRef.current)
+        ) {
+          const d = (await magangPosRes.json()) as {
+            items?: MagangPositionItem[];
+          };
+          if (d.items) {
+            setMagangPositions(d.items);
+            setPosOrderDirty(false);
+          }
+        }
+        if (magangAppRes.ok) {
+          const d = (await magangAppRes.json()) as {
+            items?: MagangApplicationItem[];
+          };
+          if (d.items) {
+            setMagangApplications(d.items);
           }
         }
         if (settingsRes.ok && (!preserveDirty || !settingsDirtyRef.current)) {
@@ -1209,6 +1326,543 @@ export function CmsDashboard({
     }
   };
 
+  // Magang Gallery Handlers
+  const openCreateGalleryModal = () => {
+    setEditingGalleryItem(null);
+    setGalleryFormTitle('');
+    setGalleryFormCaption('');
+    setGalleryFormImageUrl('');
+    setGalleryFormAltText('');
+    const maxOrder = magangGallery.reduce((acc, g) => Math.max(acc, g.sortOrder), 0);
+    setGalleryFormSortOrder(maxOrder + 1);
+    setGalleryFormIsActive(true);
+    setGalleryError('');
+    setGalleryModalOpen(true);
+  };
+
+  const openEditGalleryModal = (item: MagangGalleryItem) => {
+    setEditingGalleryItem(item);
+    setGalleryFormTitle(item.title);
+    setGalleryFormCaption(item.caption || '');
+    setGalleryFormImageUrl(item.imageUrl);
+    setGalleryFormAltText(item.altText || '');
+    setGalleryFormSortOrder(item.sortOrder);
+    setGalleryFormIsActive(item.isActive);
+    setGalleryError('');
+    setGalleryModalOpen(true);
+  };
+
+  const handleUploadGalleryPhotoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingGalleryFile(true);
+    setGalleryError('');
+    try {
+      markLocalCommit();
+      const uploaded = await uploadSingleMedia(file);
+      setGalleryFormImageUrl(uploaded.url);
+      if (!galleryFormTitle.trim()) {
+        setGalleryFormTitle(file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '));
+      }
+      await loadAllCmsData();
+      notify('Foto galeri magang berhasil diunggah ke pustaka media.');
+    } catch (err) {
+      setGalleryError(err instanceof Error ? err.message : 'Gagal mengunggah foto galeri.');
+    } finally {
+      setUploadingGalleryFile(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSaveGalleryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!galleryFormTitle.trim() || !galleryFormImageUrl.trim()) {
+      setGalleryError('Judul kegiatan dan URL/ungahan foto wajib diisi.');
+      return;
+    }
+    setSavingGalleryItem(true);
+    setGalleryError('');
+    try {
+      const endpoint = editingGalleryItem
+        ? `/api/cms/magang-gallery/${editingGalleryItem.id}`
+        : '/api/cms/magang-gallery';
+      const method = editingGalleryItem ? 'PUT' : 'POST';
+      const res = await fetch(endpoint, {
+        method,
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          title: galleryFormTitle.trim(),
+          caption: galleryFormCaption.trim(),
+          imageUrl: galleryFormImageUrl.trim(),
+          altText: galleryFormAltText.trim(),
+          sortOrder: Number(galleryFormSortOrder) > 0 ? Number(galleryFormSortOrder) : 1,
+          isActive: galleryFormIsActive,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+      };
+      if (!res.ok || !data.ok) {
+        setGalleryError(data.message || 'Gagal menyimpan foto galeri magang.');
+        return;
+      }
+      markLocalCommit();
+      setGalleryModalOpen(false);
+      await loadAllCmsData();
+      onPublicDataChanged();
+      notify(
+        editingGalleryItem
+          ? 'Foto galeri magang diperbarui & tersinkron.'
+          : 'Foto galeri magang baru ditambahkan.'
+      );
+    } catch {
+      setGalleryError('Tidak dapat terhubung ke server.');
+    } finally {
+      setSavingGalleryItem(false);
+    }
+  };
+
+  const handleToggleGalleryActive = async (item: MagangGalleryItem) => {
+    const res = await fetch(`/api/cms/magang-gallery/${item.id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({
+        title: item.title,
+        caption: item.caption,
+        imageUrl: item.imageUrl,
+        altText: item.altText,
+        sortOrder: item.sortOrder,
+        isActive: !item.isActive,
+      }),
+    });
+    if (res.ok) {
+      markLocalCommit();
+      await loadAllCmsData();
+      onPublicDataChanged();
+      notify(
+        !item.isActive
+          ? `Foto "${item.title}" ditampilkan di halaman Magang.`
+          : `Foto "${item.title}" disembunyikan.`
+      );
+    }
+  };
+
+  const handleMoveGalleryOrder = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= magangGallery.length || savingGalleryOrder) return;
+    const reordered = [...magangGallery];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(targetIndex, 0, moved);
+    setMagangGallery(reordered.map((item, idx) => ({ ...item, sortOrder: idx + 1 })));
+    setGalleryOrderDirty(true);
+  };
+
+  const handleSaveGalleryOrder = async () => {
+    if (!galleryOrderDirty || magangGallery.length === 0 || savingGalleryOrder) return;
+    setSavingGalleryOrder(true);
+    try {
+      const res = await fetch('/api/cms/magang-gallery/reorder', {
+        method: 'PATCH',
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ orderedIds: magangGallery.map((g) => g.id) }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        items?: MagangGalleryItem[];
+        message?: string;
+      };
+      if (res.ok && data.ok && Array.isArray(data.items)) {
+        markLocalCommit();
+        setMagangGallery(data.items);
+        setGalleryOrderDirty(false);
+        onPublicDataChanged();
+        notify('Urutan galeri foto magang disimpan ke MariaDB.');
+      } else {
+        notify(data.message || 'Gagal menyimpan urutan galeri foto.');
+      }
+    } catch {
+      notify('Tidak dapat terhubung ke server untuk menyimpan urutan.');
+    } finally {
+      setSavingGalleryOrder(false);
+    }
+  };
+
+  const handleCancelGalleryOrder = async () => {
+    await loadAllCmsData();
+    notify('Perubahan urutan galeri foto dibatalkan.');
+  };
+
+  const handleDeleteGalleryItem = async (id: number) => {
+    const res = await fetch(`/api/cms/magang-gallery/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+      credentials: 'include',
+    });
+    if (res.ok) {
+      markLocalCommit();
+      setConfirmDeleteGalleryId(null);
+      await loadAllCmsData();
+      onPublicDataChanged();
+      notify('Foto galeri magang dihapus dari database.');
+    }
+  };
+
+  // Magang Positions Handlers
+  const openCreatePositionModal = () => {
+    setEditingPositionItem(null);
+    setPosFormTitle('');
+    setPosFormDivision('');
+    setPosFormDescription('');
+    setPosFormImageUrl('');
+    setPosFormTasksText('');
+    const maxOrder = magangPositions.reduce((acc, p) => Math.max(acc, p.sortOrder), 0);
+    setPosFormSortOrder(maxOrder + 1);
+    setPosFormIsActive(true);
+    setPosFormIsAvailable(true);
+    setPositionError('');
+    setPositionModalOpen(true);
+  };
+
+  const openEditPositionModal = (item: MagangPositionItem) => {
+    setEditingPositionItem(item);
+    setPosFormTitle(item.title);
+    setPosFormDivision(item.division || '');
+    setPosFormDescription(item.description || '');
+    setPosFormImageUrl(item.imageUrl);
+    setPosFormTasksText((item.tasks || []).join('\n'));
+    setPosFormSortOrder(item.sortOrder);
+    setPosFormIsActive(item.isActive);
+    setPosFormIsAvailable(item.isAvailable !== false);
+    setPositionError('');
+    setPositionModalOpen(true);
+  };
+
+  const handleUploadPositionPhotoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPosFile(true);
+    setPositionError('');
+    try {
+      markLocalCommit();
+      const uploaded = await uploadSingleMedia(file);
+      setPosFormImageUrl(uploaded.url);
+      await loadAllCmsData();
+      notify('Gambar posisi magang berhasil diunggah ke pustaka media.');
+    } catch (err) {
+      setPositionError(err instanceof Error ? err.message : 'Gagal mengunggah gambar posisi.');
+    } finally {
+      setUploadingPosFile(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSavePositionItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!posFormTitle.trim() || !posFormImageUrl.trim()) {
+      setPositionError('Nama posisi dan URL/unggahan gambar posisi wajib diisi.');
+      return;
+    }
+    setSavingPositionItem(true);
+    setPositionError('');
+    const parsedTasks = posFormTasksText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    try {
+      const endpoint = editingPositionItem
+        ? `/api/cms/magang-positions/${editingPositionItem.id}`
+        : '/api/cms/magang-positions';
+      const method = editingPositionItem ? 'PUT' : 'POST';
+      const res = await fetch(endpoint, {
+        method,
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          title: posFormTitle.trim(),
+          division: posFormDivision.trim(),
+          description: posFormDescription.trim(),
+          imageUrl: posFormImageUrl.trim(),
+          tasks: parsedTasks,
+          sortOrder: Number(posFormSortOrder) > 0 ? Number(posFormSortOrder) : 1,
+          isActive: posFormIsActive,
+          isAvailable: posFormIsAvailable,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+      };
+      if (!res.ok || !data.ok) {
+        setPositionError(data.message || 'Gagal menyimpan posisi magang.');
+        return;
+      }
+      markLocalCommit();
+      setPositionModalOpen(false);
+      await loadAllCmsData();
+      onPublicDataChanged();
+      notify(
+        editingPositionItem
+          ? 'Posisi magang diperbarui & tersinkron.'
+          : 'Posisi magang baru ditambahkan.'
+      );
+    } catch {
+      setPositionError('Tidak dapat terhubung ke server.');
+    } finally {
+      setSavingPositionItem(false);
+    }
+  };
+
+  const handleTogglePositionActive = async (item: MagangPositionItem) => {
+    const res = await fetch(`/api/cms/magang-positions/${item.id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({
+        title: item.title,
+        division: item.division,
+        description: item.description,
+        imageUrl: item.imageUrl,
+        tasks: item.tasks || [],
+        sortOrder: item.sortOrder,
+        isActive: !item.isActive,
+        isAvailable: item.isAvailable !== false,
+      }),
+    });
+    if (res.ok) {
+      markLocalCommit();
+      await loadAllCmsData();
+      onPublicDataChanged();
+      notify(
+        !item.isActive
+          ? `Posisi "${item.title}" ditampilkan di halaman Magang.`
+          : `Posisi "${item.title}" disembunyikan.`
+      );
+    }
+  };
+
+  const handleTogglePositionAvailable = async (item: MagangPositionItem) => {
+    const nextAvailable = item.isAvailable === false;
+    const res = await fetch(`/api/cms/magang-positions/${item.id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({
+        title: item.title,
+        division: item.division,
+        description: item.description,
+        imageUrl: item.imageUrl,
+        tasks: item.tasks || [],
+        sortOrder: item.sortOrder,
+        isActive: item.isActive,
+        isAvailable: nextAvailable,
+      }),
+    });
+    if (res.ok) {
+      markLocalCommit();
+      await loadAllCmsData();
+      onPublicDataChanged();
+      notify(
+        nextAvailable
+          ? `Opsi "${item.title}" dibuka pada formulir pendaftaran.`
+          : `Opsi "${item.title}" ditandai tidak tersedia / penuh.`
+      );
+    }
+  };
+
+  const handleMovePositionOrder = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= magangPositions.length || savingPosOrder) return;
+    const reordered = [...magangPositions];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(targetIndex, 0, moved);
+    setMagangPositions(reordered.map((item, idx) => ({ ...item, sortOrder: idx + 1 })));
+    setPosOrderDirty(true);
+  };
+
+  const handleSavePositionOrder = async () => {
+    if (!posOrderDirty || magangPositions.length === 0 || savingPosOrder) return;
+    setSavingPosOrder(true);
+    try {
+      const res = await fetch('/api/cms/magang-positions/reorder', {
+        method: 'PATCH',
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ orderedIds: magangPositions.map((p) => p.id) }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        items?: MagangPositionItem[];
+        message?: string;
+      };
+      if (res.ok && data.ok && Array.isArray(data.items)) {
+        markLocalCommit();
+        setMagangPositions(data.items);
+        setPosOrderDirty(false);
+        onPublicDataChanged();
+        notify('Urutan posisi magang disimpan ke MariaDB.');
+      } else {
+        notify(data.message || 'Gagal menyimpan urutan posisi magang.');
+      }
+    } catch {
+      notify('Tidak dapat terhubung ke server untuk menyimpan urutan.');
+    } finally {
+      setSavingPosOrder(false);
+    }
+  };
+
+  const handleCancelPositionOrder = async () => {
+    await loadAllCmsData();
+    notify('Perubahan urutan posisi magang dibatalkan.');
+  };
+
+  const handleDeletePositionItem = async (id: number) => {
+    const res = await fetch(`/api/cms/magang-positions/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+      credentials: 'include',
+    });
+    if (res.ok) {
+      markLocalCommit();
+      setConfirmDeletePositionId(null);
+      await loadAllCmsData();
+      onPublicDataChanged();
+      notify('Posisi magang dihapus dari database.');
+    }
+  };
+
+  // Magang Applications Inbox Handlers
+  const handleUpdateApplicationStatus = async (
+    id: number,
+    status: MagangApplicationStatus
+  ) => {
+    setUpdatingAppStatusId(id);
+    try {
+      const res = await fetch(`/api/cms/magang-applications/${id}/status`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        markLocalCommit();
+        setMagangApplications((prev) =>
+          prev.map((a) => (a.id === id ? { ...a, status } : a))
+        );
+        setSelectedApplicant((prev) =>
+          prev && prev.id === id ? { ...prev, status } : prev
+        );
+        notify('Status pendaftar magang diperbarui.');
+      }
+    } finally {
+      setUpdatingAppStatusId(null);
+    }
+  };
+
+  const handleDeleteApplication = async (id: number) => {
+    const res = await fetch(`/api/cms/magang-applications/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+      credentials: 'include',
+    });
+    if (res.ok) {
+      markLocalCommit();
+      setConfirmDeleteAppId(null);
+      if (selectedApplicant?.id === id) setSelectedApplicant(null);
+      await loadAllCmsData();
+      notify('Data pendaftar magang dihapus dari database.');
+    }
+  };
+
+  const handleDownloadApplicantFile = async (
+    fileId: string,
+    fallbackName: string
+  ) => {
+    setDownloadingFileKey(fileId);
+    try {
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`/api/cms/magang-files/${encodeURIComponent(fileId)}`, {
+        headers,
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        notify('Gagal mengunduh berkas pendaftar.');
+        return;
+      }
+      const disposition = res.headers.get('content-disposition') || '';
+      const match = /filename="?([^"]+)"?/i.exec(disposition);
+      const filename = match?.[1] || fallbackName || 'berkas-pendaftar';
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      notify('Tidak dapat mengunduh berkas pendaftar.');
+    } finally {
+      setDownloadingFileKey(null);
+    }
+  };
+
+  const handleExportApplicationsCsv = () => {
+    if (magangApplications.length === 0) return;
+    const csvEscape = (val: string | null | undefined) =>
+      `"${String(val || '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+    const headers = [
+      'Kode Pendaftaran',
+      'Status',
+      'Nama Lengkap',
+      'Email',
+      'Nomor Telepon',
+      'Program Studi',
+      'Fakultas',
+      'Posisi Diminati',
+      'Pemahaman P2B',
+      'Alasan Tertarik',
+      'Harapan Magang',
+      'Tautan/Berkas CV',
+      'Tautan/Berkas Portofolio',
+      'Tanggal Daftar',
+    ];
+    const rows = magangApplications.map((a) => [
+      a.registrationCode,
+      a.status,
+      a.fullName,
+      a.email,
+      a.phone,
+      a.studyProgram,
+      a.faculty,
+      a.positionTitle,
+      a.aboutP2b,
+      a.interestReason,
+      a.expectations,
+      a.resumeFileName || a.resumeUrl,
+      a.portfolioFileName || a.portfolioUrl,
+      a.createdAt,
+    ]);
+    const csvContent =
+      '\uFEFF' +
+      [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `pendaftar-magang-p2b-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    notify('Data pendaftar magang berhasil diekspor ke CSV.');
+  };
+
   // Site Settings Handlers
   const updateSettingField = (key: keyof SiteSettings, value: string) => {
     setSettingsForm((prev) => ({ ...prev, [key]: value }));
@@ -1234,6 +1888,27 @@ export function CmsDashboard({
       );
     } finally {
       setUploadingHeroBg(false);
+    }
+  };
+
+  const handleUploadMagangHeroImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingMagangHero(true);
+    setSettingsError('');
+    try {
+      markLocalCommit();
+      const media = await uploadSingleMedia(file);
+      updateSettingField('page_magang_image', media.url);
+      await loadAllCmsData({ preserveDirtyEdits: true });
+      notify('Gambar hero halaman Magang berhasil diunggah ke pustaka media.');
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : 'Gagal mengunggah gambar hero magang.'
+      );
+    } finally {
+      setUploadingMagangHero(false);
     }
   };
 
@@ -1349,6 +2024,7 @@ export function CmsDashboard({
     { id: 'news', label: 'Kelola Berita', icon: 'mdi:newspaper-variant-outline' },
     { id: 'media', label: 'Kelola Media', icon: 'mdi:folder-open-outline' },
     { id: 'logos', label: 'Logo Mitra', icon: 'mdi:office-building-outline' },
+    { id: 'magang', label: 'Magang P2B', icon: 'mdi:school-outline' },
     { id: 'settings', label: 'Pengaturan Situs', icon: 'mdi:compass-outline' },
     { id: 'security', label: 'Keamanan Akun', icon: 'mdi:lock-outline' },
   ];
@@ -2615,6 +3291,847 @@ export function CmsDashboard({
           </div>
         )}
 
+        {activeTab === 'magang' && (
+          <div className="flex flex-col gap-6">
+            {/* Panel 0: Hero & Jadwal Khusus Halaman Magang (Eksklusif di Tab Magang) */}
+            <form
+              onSubmit={handleSaveSettings}
+              className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/75 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#C9A45A]/20 pb-5">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Eksklusif Halaman /magang · Sinkron Real-Time MariaDB
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-normal text-[#164234]">
+                    Hero &amp; Pengaturan Program Magang
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[#3E544B]">
+                    Atur gambar hero khusus halaman Magang, teks pengantar, batas akhir pendaftaran, dan periode magang langsung dari modul ini.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  {settingsDirty && (
+                    <button
+                      type="button"
+                      disabled={savingSettings}
+                      onClick={() => {
+                        setSettingsDirty(false);
+                        void loadAllCmsData();
+                      }}
+                      className="px-4 py-2.5 rounded-full bg-white hover:bg-[#F6F3EC] text-[#3E544B] border border-[#C9A45A]/35 text-xs sm:text-sm transition-colors cursor-pointer"
+                    >
+                      Batalkan
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={savingSettings || uploadingMagangHero}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Icon icon="mdi:check" className="w-4 h-4 text-[#F4D993]" />
+                    <span>{savingSettings ? 'Menyimpan...' : 'Simpan Pengaturan Magang'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {settingsError && (
+                <div
+                  role="alert"
+                  className="px-4 py-3 rounded-2xl bg-[#9b2c2c]/10 border border-[#9b2c2c]/25 text-xs sm:text-sm text-[#9b2c2c]"
+                >
+                  {settingsError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Left: Hero Image Preview & Upload */}
+                <div className="lg:col-span-5 flex flex-col gap-3">
+                  <div className="aspect-[16/9] rounded-2xl overflow-hidden border border-[#C9A45A]/30 bg-[#EAE5D7]">
+                    <img
+                      src={settingsForm.page_magang_image?.trim() || DEFAULT_MAGANG_HERO_IMAGE}
+                      alt="Pratinjau Gambar Hero Halaman Magang"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer transition-colors">
+                      <Icon icon="mdi:upload-outline" className="w-3.5 h-3.5 text-[#F4D993]" />
+                      <span>
+                        {uploadingMagangHero ? 'Mengunggah...' : 'Unggah Gambar Hero Magang'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingMagangHero}
+                        onChange={(e) => void handleUploadMagangHeroImage(e)}
+                        className="hidden"
+                      />
+                    </label>
+                    {settingsForm.page_magang_image && (
+                      <button
+                        type="button"
+                        onClick={() => updateSettingField('page_magang_image', '')}
+                        className="px-3.5 py-2 rounded-full bg-[#F6F3EC] hover:bg-[#EAE3D2] text-[#9b2c2c] text-xs cursor-pointer transition-colors"
+                      >
+                        Reset ke Bawaan
+                      </button>
+                    )}
+                  </div>
+
+                  <input
+                    type="text"
+                    value={settingsForm.page_magang_image || ''}
+                    onChange={(e) => updateSettingField('page_magang_image', e.target.value)}
+                    placeholder="Kosongkan untuk default (/assets/magang/hero_team.jpg) atau /api/media/..."
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-xs sm:text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+
+                  {mediaItems.some((m) => m.mimeType.startsWith('image/')) && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs text-[#3E544B]">
+                        Pilih cepat gambar hero dari Pustaka Media:
+                      </span>
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                        {mediaItems
+                          .filter((m) => m.mimeType.startsWith('image/'))
+                          .slice(0, 12)
+                          .map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => updateSettingField('page_magang_image', m.url)}
+                              title={m.originalName}
+                              className={`w-16 h-12 rounded-xl bg-white border overflow-hidden shrink-0 flex items-center justify-center cursor-pointer transition-colors ${
+                                settingsForm.page_magang_image === m.url
+                                  ? 'border-[#164234] ring-2 ring-[#164234]/20'
+                                  : 'border-[#C9A45A]/25 hover:border-[#164234]/60'
+                              }`}
+                            >
+                              <img
+                                src={m.url}
+                                alt={m.originalName}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: Magang Hero Copy & Recruitment Schedule */}
+                <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2 flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">Label Atas Hero (Eyebrow)</label>
+                    <input
+                      type="text"
+                      value={settingsForm.page_magang_eyebrow || ''}
+                      onChange={(e) => updateSettingField('page_magang_eyebrow', e.target.value)}
+                      placeholder="Open Recruitment · Talenta Mahasiswa"
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">Subjudul Hero Halaman Magang</label>
+                    <textarea
+                      rows={3}
+                      value={settingsForm.page_magang_subtitle || ''}
+                      onChange={(e) => updateSettingField('page_magang_subtitle', e.target.value)}
+                      placeholder="Pusat Pengembangan Bisnis (P2B) UIN Salatiga membuka kesempatan magang..."
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">Batas Akhir Pendaftaran</label>
+                    <input
+                      type="text"
+                      value={settingsForm.magang_deadline || ''}
+                      onChange={(e) => updateSettingField('magang_deadline', e.target.value)}
+                      placeholder="Kamis, 22 Oktober 2026"
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">Periode Program Magang</label>
+                    <input
+                      type="text"
+                      value={settingsForm.magang_period || ''}
+                      onChange={(e) => updateSettingField('magang_period', e.target.value)}
+                      placeholder="Sampai dengan 30 April 2027"
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </form>
+
+            {/* Panel 1: Galeri Foto Anak Magang */}
+            <div className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Galeri Foto Dinamis ({magangGallery.filter((g) => g.isActive).length} Aktif · {magangGallery.length} Total)
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-normal text-[#164234]">
+                    Galeri Foto Anak Magang
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#3E544B]">
+                    Atur dokumentasi kegiatan mahasiswa magang yang tampil pada bagian atas halaman /magang.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  {galleryOrderDirty && (
+                    <button
+                      type="button"
+                      disabled={savingGalleryOrder}
+                      onClick={() => void handleCancelGalleryOrder()}
+                      className="px-4 py-2.5 rounded-full bg-white hover:bg-[#F6F3EC] text-[#3E544B] border border-[#C9A45A]/35 text-xs sm:text-sm transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                    >
+                      Batalkan Urutan
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={!galleryOrderDirty || savingGalleryOrder}
+                    onClick={() => void handleSaveGalleryOrder()}
+                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs sm:text-sm transition-colors whitespace-nowrap ${
+                      galleryOrderDirty
+                        ? 'bg-[#8F6D26] hover:bg-[#7A5B1D] text-[#FAF8F3] cursor-pointer shadow-sm'
+                        : 'bg-white/80 text-[#3E544B]/60 border border-[#C9A45A]/25 cursor-not-allowed'
+                    }`}
+                  >
+                    <Icon icon="mdi:check" className="w-4 h-4" />
+                    <span>{savingGalleryOrder ? 'Menyimpan...' : 'Simpan Urutan'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={openCreateGalleryModal}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Icon icon="mdi:plus" className="w-4 h-4 text-[#F4D993]" />
+                    <span>Tambah Foto Galeri</span>
+                  </button>
+                </div>
+              </div>
+
+              {galleryOrderDirty && (
+                <div className="rounded-2xl bg-[#F4EFE3] border border-[#C9A45A]/45 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm text-[#164234]">
+                  <span>
+                    Urutan galeri foto telah diubah. Klik <strong>Simpan Urutan</strong> agar diterapkan ke halaman Magang.
+                  </span>
+                  <button
+                    type="button"
+                    disabled={savingGalleryOrder}
+                    onClick={() => void handleSaveGalleryOrder()}
+                    className="px-4 py-1.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs whitespace-nowrap cursor-pointer w-fit"
+                  >
+                    {savingGalleryOrder ? 'Menyimpan...' : 'Simpan Sekarang'}
+                  </button>
+                </div>
+              )}
+
+              {magangGallery.length === 0 ? (
+                <div className="rounded-2xl bg-white/70 border border-[#C9A45A]/25 p-8 text-center text-sm text-[#3E544B]">
+                  Belum ada foto galeri anak magang. Klik &ldquo;Tambah Foto Galeri&rdquo; untuk menambahkan dokumentasi.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {magangGallery.map((item, index) => {
+                    const isConfirmDelete = confirmDeleteGalleryId === item.id;
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-2xl bg-white/85 border border-[#C9A45A]/25 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                      >
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className="flex flex-col items-center gap-1 shrink-0">
+                            <span className="text-xs tabular-nums font-medium text-[#8F6D26]">
+                              #{String(index + 1).padStart(2, '0')}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={index === 0 || savingGalleryOrder}
+                                onClick={() => handleMoveGalleryOrder(index, -1)}
+                                title="Naikkan urutan"
+                                className="w-7 h-7 rounded-lg bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/25 flex items-center justify-center disabled:opacity-35 cursor-pointer transition-colors"
+                              >
+                                <Icon icon="mdi:arrow-up" className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={index === magangGallery.length - 1 || savingGalleryOrder}
+                                onClick={() => handleMoveGalleryOrder(index, 1)}
+                                title="Turunkan urutan"
+                                className="w-7 h-7 rounded-lg bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/25 flex items-center justify-center disabled:opacity-35 cursor-pointer transition-colors"
+                              >
+                                <Icon icon="mdi:arrow-down" className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="w-28 h-20 rounded-xl bg-[#EAE5D7] border border-[#C9A45A]/30 shrink-0 overflow-hidden">
+                            <img
+                              src={item.imageUrl}
+                              alt={item.altText || item.title}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wider text-[#8F6D26]">
+                              <span className={item.isActive ? 'text-[#164234]' : 'text-[#9b2c2c]'}>
+                                {item.isActive ? 'Tampil di Halaman Magang' : 'Disembunyikan'}
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span className="tabular-nums text-[#3E544B]">
+                                Urutan DB: {item.sortOrder}
+                              </span>
+                            </div>
+                            <h4 className="text-base sm:text-lg font-normal text-[#164234] truncate">
+                              {item.title}
+                            </h4>
+                            <p className="text-xs text-[#3E544B] line-clamp-2">
+                              {item.caption || 'Tanpa keterangan singkat'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 shrink-0 pl-12 md:pl-0">
+                          <button
+                            type="button"
+                            onClick={() => void handleToggleGalleryActive(item)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/25 text-xs transition-colors cursor-pointer"
+                          >
+                            {item.isActive ? (
+                              <Icon icon="mdi:eye-off-outline" className="w-3.5 h-3.5" />
+                            ) : (
+                              <Icon icon="mdi:eye-outline" className="w-3.5 h-3.5" />
+                            )}
+                            <span>{item.isActive ? 'Sembunyikan' : 'Tampilkan'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => openEditGalleryModal(item)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[rgba(22,66,52,0.08)] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] text-xs transition-colors cursor-pointer"
+                          >
+                            <Icon icon="mdi:pencil-outline" className="w-3.5 h-3.5" />
+                            <span>Edit</span>
+                          </button>
+
+                          {!isConfirmDelete ? (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteGalleryId(item.id)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#9b2c2c]/10 hover:bg-[#9b2c2c] text-[#9b2c2c] hover:text-white text-xs transition-colors cursor-pointer"
+                            >
+                              <Icon icon="mdi:trash-can-outline" className="w-3.5 h-3.5" />
+                              <span>Hapus</span>
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => void handleDeleteGalleryItem(item.id)}
+                                className="px-3 py-1.5 rounded-xl bg-[#9b2c2c] text-white text-xs cursor-pointer"
+                              >
+                                Ya, Hapus
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteGalleryId(null)}
+                                className="px-3 py-1.5 rounded-xl bg-[#F6F3EC] text-[#164234] text-xs cursor-pointer"
+                              >
+                                Batal
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Panel 2: Posisi Magang */}
+            <div className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Open Recruitment ({magangPositions.filter((p) => p.isActive).length} Aktif · {magangPositions.length} Total)
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-normal text-[#164234]">
+                    Posisi Magang P2B
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#3E544B]">
+                    Kelola kartu posisi magang (judul, divisi, foto sampul, deskripsi, dan poin tugas).
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  {posOrderDirty && (
+                    <button
+                      type="button"
+                      disabled={savingPosOrder}
+                      onClick={() => void handleCancelPositionOrder()}
+                      className="px-4 py-2.5 rounded-full bg-white hover:bg-[#F6F3EC] text-[#3E544B] border border-[#C9A45A]/35 text-xs sm:text-sm transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                    >
+                      Batalkan Urutan
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={!posOrderDirty || savingPosOrder}
+                    onClick={() => void handleSavePositionOrder()}
+                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs sm:text-sm transition-colors whitespace-nowrap ${
+                      posOrderDirty
+                        ? 'bg-[#8F6D26] hover:bg-[#7A5B1D] text-[#FAF8F3] cursor-pointer shadow-sm'
+                        : 'bg-white/80 text-[#3E544B]/60 border border-[#C9A45A]/25 cursor-not-allowed'
+                    }`}
+                  >
+                    <Icon icon="mdi:check" className="w-4 h-4" />
+                    <span>{savingPosOrder ? 'Menyimpan...' : 'Simpan Urutan'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={openCreatePositionModal}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Icon icon="mdi:plus" className="w-4 h-4 text-[#F4D993]" />
+                    <span>Tambah Posisi</span>
+                  </button>
+                </div>
+              </div>
+
+              {posOrderDirty && (
+                <div className="rounded-2xl bg-[#F4EFE3] border border-[#C9A45A]/45 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm text-[#164234]">
+                  <span>
+                    Urutan posisi magang telah diubah. Klik <strong>Simpan Urutan</strong> agar diterapkan ke halaman Magang.
+                  </span>
+                  <button
+                    type="button"
+                    disabled={savingPosOrder}
+                    onClick={() => void handleSavePositionOrder()}
+                    className="px-4 py-1.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs whitespace-nowrap cursor-pointer w-fit"
+                  >
+                    {savingPosOrder ? 'Menyimpan...' : 'Simpan Sekarang'}
+                  </button>
+                </div>
+              )}
+
+              {magangPositions.length === 0 ? (
+                <div className="rounded-2xl bg-white/70 border border-[#C9A45A]/25 p-8 text-center text-sm text-[#3E544B]">
+                  Belum ada posisi magang terdaftar. Klik &ldquo;Tambah Posisi&rdquo; untuk membuat kartu posisi baru.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {magangPositions.map((pos, index) => {
+                    const isConfirmDelete = confirmDeletePositionId === pos.id;
+                    return (
+                      <div
+                        key={pos.id}
+                        className="rounded-2xl bg-white/85 border border-[#C9A45A]/25 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                      >
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className="flex flex-col items-center gap-1 shrink-0">
+                            <span className="text-xs tabular-nums font-medium text-[#8F6D26]">
+                              #{String(index + 1).padStart(2, '0')}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={index === 0 || savingPosOrder}
+                                onClick={() => handleMovePositionOrder(index, -1)}
+                                title="Naikkan urutan"
+                                className="w-7 h-7 rounded-lg bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/25 flex items-center justify-center disabled:opacity-35 cursor-pointer transition-colors"
+                              >
+                                <Icon icon="mdi:arrow-up" className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={index === magangPositions.length - 1 || savingPosOrder}
+                                onClick={() => handleMovePositionOrder(index, 1)}
+                                title="Turunkan urutan"
+                                className="w-7 h-7 rounded-lg bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/25 flex items-center justify-center disabled:opacity-35 cursor-pointer transition-colors"
+                              >
+                                <Icon icon="mdi:arrow-down" className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="w-28 h-20 rounded-xl bg-[#EAE5D7] border border-[#C9A45A]/30 shrink-0 overflow-hidden">
+                            <img
+                              src={pos.imageUrl}
+                              alt={pos.title}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wider text-[#8F6D26]">
+                              <span className={pos.isActive ? 'text-[#164234]' : 'text-[#9b2c2c]'}>
+                                {pos.isActive ? 'Tampil di Halaman' : 'Disembunyikan'}
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span
+                                className={
+                                  pos.isAvailable !== false
+                                    ? 'text-[#164234] font-medium'
+                                    : 'text-[#9b2c2c] font-medium'
+                                }
+                              >
+                                {pos.isAvailable !== false
+                                  ? 'Opsi Form Tersedia'
+                                  : 'Opsi Form Penuh / Ditutup'}
+                              </span>
+                              {pos.division && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="text-[#8F6D26]">{pos.division}</span>
+                                </>
+                              )}
+                              <span aria-hidden="true">·</span>
+                              <span className="tabular-nums text-[#3E544B]">
+                                {pos.tasks?.length || 0} Poin Tugas
+                              </span>
+                            </div>
+                            <h4 className="text-base sm:text-lg font-normal text-[#164234] truncate">
+                              {pos.title}
+                            </h4>
+                            <p className="text-xs text-[#3E544B] line-clamp-2">
+                              {pos.description}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 shrink-0 pl-12 md:pl-0">
+                          <button
+                            type="button"
+                            onClick={() => void handleTogglePositionAvailable(pos)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs transition-colors cursor-pointer whitespace-nowrap ${
+                              pos.isAvailable !== false
+                                ? 'bg-[#F4EFE3] hover:bg-[#8F6D26] text-[#8F6D26] hover:text-[#FAF8F3] border-[#C9A45A]/35'
+                                : 'bg-[#164234] hover:bg-[#1E5644] text-[#FAF8F3] border-[#164234]'
+                            }`}
+                          >
+                            <Icon
+                              icon={pos.isAvailable !== false ? 'mdi:check' : 'mdi:plus'}
+                              className="w-3.5 h-3.5"
+                            />
+                            <span>
+                              {pos.isAvailable !== false ? 'Tutup Opsi Form' : 'Buka Opsi Form'}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => void handleTogglePositionActive(pos)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/25 text-xs transition-colors cursor-pointer"
+                          >
+                            {pos.isActive ? (
+                              <Icon icon="mdi:eye-off-outline" className="w-3.5 h-3.5" />
+                            ) : (
+                              <Icon icon="mdi:eye-outline" className="w-3.5 h-3.5" />
+                            )}
+                            <span>{pos.isActive ? 'Sembunyikan' : 'Tampilkan'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => openEditPositionModal(pos)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[rgba(22,66,52,0.08)] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] text-xs transition-colors cursor-pointer"
+                          >
+                            <Icon icon="mdi:pencil-outline" className="w-3.5 h-3.5" />
+                            <span>Edit</span>
+                          </button>
+
+                          {!isConfirmDelete ? (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeletePositionId(pos.id)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#9b2c2c]/10 hover:bg-[#9b2c2c] text-[#9b2c2c] hover:text-white text-xs transition-colors cursor-pointer"
+                            >
+                              <Icon icon="mdi:trash-can-outline" className="w-3.5 h-3.5" />
+                              <span>Hapus</span>
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => void handleDeletePositionItem(pos.id)}
+                                className="px-3 py-1.5 rounded-xl bg-[#9b2c2c] text-white text-xs cursor-pointer"
+                              >
+                                Ya, Hapus
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeletePositionId(null)}
+                                className="px-3 py-1.5 rounded-xl bg-[#F6F3EC] text-[#164234] text-xs cursor-pointer"
+                              >
+                                Batal
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Panel 3: Pendaftar Magang Masuk */}
+            <div className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26] tabular-nums">
+                    Data Pelamar Masuk · {magangApplications.length} Pendaftar
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-normal text-[#164234]">
+                    Pendaftar Magang Masuk
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#3E544B]">
+                    Tinjau formulir pendaftar, ubah status seleksi, serta unduh berkas surat lamaran dan portofolio.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/85 border border-[#C9A45A]/30 w-full sm:w-72">
+                    <Icon icon="mdi:magnify" className="w-4 h-4 text-[#B89242] shrink-0" />
+                    <input
+                      type="search"
+                      value={appSearch}
+                      onChange={(e) => setAppSearch(e.target.value)}
+                      placeholder="Cari nama, prodi, atau posisi..."
+                      className="w-full bg-transparent text-xs sm:text-sm text-[#164234] focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={magangApplications.length === 0}
+                    onClick={handleExportApplicationsCsv}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/40 text-xs sm:text-sm transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  >
+                    <Icon icon="mdi:file-download-outline" className="w-4 h-4 text-[#8F6D26]" />
+                    <span>Export CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    { id: 'all', label: 'Semua' },
+                    { id: 'baru', label: 'Baru' },
+                    { id: 'ditinjau', label: 'Ditinjau' },
+                    { id: 'diterima', label: 'Diterima' },
+                    { id: 'ditolak', label: 'Ditolak' },
+                  ] as const
+                ).map((st) => {
+                  const count =
+                    st.id === 'all'
+                      ? magangApplications.length
+                      : magangApplications.filter((a) => a.status === st.id).length;
+                  const active = appStatusFilter === st.id;
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => setAppStatusFilter(st.id)}
+                      className={`px-4 py-2 rounded-full text-xs transition-colors cursor-pointer tabular-nums whitespace-nowrap ${
+                        active
+                          ? 'bg-[#164234] text-[#F6F3EC]'
+                          : 'bg-white/80 hover:bg-[#F6F3EC] text-[#3E544B] border border-[#C9A45A]/25'
+                      }`}
+                    >
+                      {st.label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+
+              {(() => {
+                const q = appSearch.trim().toLowerCase();
+                const filteredApps = magangApplications.filter((a) => {
+                  if (appStatusFilter !== 'all' && a.status !== appStatusFilter) {
+                    return false;
+                  }
+                  if (!q) return true;
+                  return (
+                    a.fullName.toLowerCase().includes(q) ||
+                    a.email.toLowerCase().includes(q) ||
+                    a.positionTitle.toLowerCase().includes(q) ||
+                    a.faculty.toLowerCase().includes(q) ||
+                    a.studyProgram.toLowerCase().includes(q) ||
+                    a.registrationCode.toLowerCase().includes(q)
+                  );
+                });
+
+                if (filteredApps.length === 0) {
+                  return (
+                    <div className="rounded-2xl bg-white/70 border border-[#C9A45A]/25 p-8 text-center text-sm text-[#3E544B]">
+                      {magangApplications.length === 0
+                        ? 'Belum ada pendaftar magang yang masuk melalui formulir website.'
+                        : 'Tidak ada pendaftar yang sesuai dengan filter atau pencarian.'}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="flex flex-col gap-3">
+                    {filteredApps.map((app) => {
+                      const isConfirmDelete = confirmDeleteAppId === app.id;
+                      return (
+                        <div
+                          key={app.id}
+                          className="rounded-2xl bg-white/85 border border-[#C9A45A]/25 p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                        >
+                          <div className="flex flex-col gap-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wider text-[#8F6D26] tabular-nums">
+                              <span className="font-mono text-[#164234]">
+                                {app.registrationCode}
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span>{app.positionTitle}</span>
+                              <span aria-hidden="true">·</span>
+                              <span className="text-[#3E544B]">
+                                {new Date(app.createdAt).toLocaleDateString('id-ID', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })}
+                              </span>
+                            </div>
+
+                            <h4 className="text-base sm:text-lg font-normal text-[#164234] truncate">
+                              {app.fullName}
+                            </h4>
+
+                            <p className="text-xs text-[#3E544B]">
+                              {app.studyProgram} · Fakultas {app.faculty} · {app.email} · {app.phone}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            <select
+                              value={app.status}
+                              disabled={updatingAppStatusId === app.id}
+                              onChange={(e) =>
+                                void handleUpdateApplicationStatus(
+                                  app.id,
+                                  e.target.value as MagangApplicationStatus
+                                )
+                              }
+                              aria-label={`Ubah status ${app.fullName}`}
+                              className="px-3 py-2 rounded-xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-xs text-[#164234] focus:outline-none cursor-pointer"
+                            >
+                              <option value="baru">Status: Baru</option>
+                              <option value="ditinjau">Status: Ditinjau</option>
+                              <option value="diterima">Status: Diterima</option>
+                              <option value="ditolak">Status: Ditolak</option>
+                            </select>
+
+                            {app.resumeFileId && (
+                              <button
+                                type="button"
+                                disabled={downloadingFileKey === app.resumeFileId}
+                                onClick={() =>
+                                  app.resumeFileId &&
+                                  void handleDownloadApplicantFile(
+                                    app.resumeFileId,
+                                    app.resumeFileName || 'cv-lamaran'
+                                  )
+                                }
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/25 text-xs transition-colors cursor-pointer"
+                              >
+                                <Icon icon="mdi:download-outline" className="w-3.5 h-3.5" />
+                                <span>CV</span>
+                              </button>
+                            )}
+
+                            {app.portfolioFileId && (
+                              <button
+                                type="button"
+                                disabled={downloadingFileKey === app.portfolioFileId}
+                                onClick={() =>
+                                  app.portfolioFileId &&
+                                  void handleDownloadApplicantFile(
+                                    app.portfolioFileId,
+                                    app.portfolioFileName || 'portofolio'
+                                  )
+                                }
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/25 text-xs transition-colors cursor-pointer"
+                              >
+                                <Icon icon="mdi:download-outline" className="w-3.5 h-3.5" />
+                                <span>Portofolio</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedApplicant(app)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[rgba(22,66,52,0.08)] hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] text-xs transition-colors cursor-pointer"
+                            >
+                              <Icon icon="mdi:eye-outline" className="w-3.5 h-3.5" />
+                              <span>Lihat Detail</span>
+                            </button>
+
+                            {!isConfirmDelete ? (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteAppId(app.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#9b2c2c]/10 hover:bg-[#9b2c2c] text-[#9b2c2c] hover:text-white text-xs transition-colors cursor-pointer"
+                              >
+                                <Icon icon="mdi:trash-can-outline" className="w-3.5 h-3.5" />
+                                <span>Hapus</span>
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDeleteApplication(app.id)}
+                                  className="px-3 py-1.5 rounded-xl bg-[#9b2c2c] text-white text-xs cursor-pointer"
+                                >
+                                  Ya, Hapus
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteAppId(null)}
+                                  className="px-3 py-1.5 rounded-xl bg-[#F6F3EC] text-[#164234] text-xs cursor-pointer"
+                                >
+                                  Batal
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'settings' && (
           <form
             onSubmit={handleSaveSettings}
@@ -2841,6 +4358,19 @@ export function CmsDashboard({
                       updateSettingField('footer_social_url', e.target.value)
                     }
                     placeholder="https://www.instagram.com/p2b.uinsalatiga"
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-[#3E544B]">Tautan TikTok Resmi</label>
+                  <input
+                    type="text"
+                    value={settingsForm.footer_tiktok_url || ''}
+                    onChange={(e) =>
+                      updateSettingField('footer_tiktok_url', e.target.value)
+                    }
+                    placeholder="https://www.tiktok.com/@p2b.uin.salatiga"
                     className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
                   />
                 </div>
@@ -3576,6 +5106,644 @@ export function CmsDashboard({
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add / Edit Magang Gallery Photo Modal */}
+      <AnimatePresence>
+        {galleryModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setGalleryModalOpen(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/30 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-3xl bg-[#FAF8F3] border border-[#C9A45A]/35 p-6 sm:p-7 text-[#164234] shadow-xl relative"
+            >
+              <button
+                type="button"
+                onClick={() => setGalleryModalOpen(false)}
+                aria-label="Tutup modal foto galeri magang"
+                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] flex items-center justify-center cursor-pointer"
+              >
+                <Icon icon="mdi:close" className="w-4 h-4" />
+              </button>
+
+              <div className="flex flex-col gap-1 mb-5 pr-10">
+                <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                  Galeri Foto Anak Magang
+                </span>
+                <h3 className="text-xl font-normal tracking-tight">
+                  {editingGalleryItem ? 'Edit Foto Galeri Magang' : 'Tambah Foto Galeri Magang'}
+                </h3>
+              </div>
+
+              <form onSubmit={handleSaveGalleryItem} className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-2xl bg-white border border-[#C9A45A]/25">
+                  <div className="w-36 h-24 rounded-2xl bg-[#EAE5D7] border border-[#C9A45A]/35 shrink-0 flex items-center justify-center overflow-hidden">
+                    {galleryFormImageUrl ? (
+                      <img
+                        src={galleryFormImageUrl}
+                        alt="Pratinjau foto galeri"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Icon icon="mdi:image-multiple-outline" className="w-7 h-7 text-[#164234]/45" />
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2 flex-1 w-full">
+                    <label className="text-xs text-[#3E544B]">
+                      Berkas Foto Kegiatan (JPG, PNG, atau WebP)
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer transition-colors">
+                        <Icon icon="mdi:upload-outline" className="w-3.5 h-3.5 text-[#F4D993]" />
+                        <span>
+                          {uploadingGalleryFile ? 'Mengunggah...' : 'Unggah Foto'}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingGalleryFile}
+                          onChange={(e) => void handleUploadGalleryPhotoFile(e)}
+                          className="hidden"
+                        />
+                      </label>
+                      {galleryFormImageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setGalleryFormImageUrl('')}
+                          className="px-3 py-2 rounded-full bg-[#F6F3EC] text-[#9b2c2c] text-xs cursor-pointer"
+                        >
+                          Bersihkan
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={galleryFormImageUrl}
+                      onChange={(e) => setGalleryFormImageUrl(e.target.value)}
+                      placeholder="/api/media/... atau /assets/magang/..."
+                      className="px-3.5 py-2 rounded-xl bg-[#FAF8F3] border border-[#C9A45A]/25 text-xs text-[#164234] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {mediaItems.some((m) => m.mimeType.startsWith('image/')) && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-[#3E544B]">
+                      Atau pilih cepat dari Pustaka Media:
+                    </span>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      {mediaItems
+                        .filter((m) => m.mimeType.startsWith('image/'))
+                        .slice(0, 12)
+                        .map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setGalleryFormImageUrl(m.url)}
+                            title={m.originalName}
+                            className={`w-16 h-12 rounded-xl bg-white border overflow-hidden shrink-0 flex items-center justify-center cursor-pointer transition-colors ${
+                              galleryFormImageUrl === m.url
+                                ? 'border-[#164234] ring-2 ring-[#164234]/20'
+                                : 'border-[#C9A45A]/25 hover:border-[#164234]/60'
+                            }`}
+                          >
+                            <img
+                              src={m.url}
+                              alt={m.originalName}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-[#3E544B]">Judul Kegiatan / Foto</label>
+                    <input
+                      type="text"
+                      required
+                      value={galleryFormTitle}
+                      onChange={(e) => setGalleryFormTitle(e.target.value)}
+                      placeholder="Contoh: Kolaborasi & Perencanaan Program"
+                      className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-[#3E544B]">Nomor Urut Tampil</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={galleryFormSortOrder}
+                      onChange={(e) =>
+                        setGalleryFormSortOrder(Math.max(1, Number(e.target.value) || 1))
+                      }
+                      className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-[#3E544B]">Keterangan / Deskripsi Singkat</label>
+                  <textarea
+                    rows={2}
+                    value={galleryFormCaption}
+                    onChange={(e) => setGalleryFormCaption(e.target.value)}
+                    placeholder="Deskripsi aktivitas mahasiswa magang pada foto ini..."
+                    className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-[#3E544B]">Teks Alternatif SEO (Opsional)</label>
+                  <input
+                    type="text"
+                    value={galleryFormAltText}
+                    onChange={(e) => setGalleryFormAltText(e.target.value)}
+                    placeholder="Kosongkan untuk menggunakan judul foto secara otomatis"
+                    className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
+                  />
+                </div>
+
+                <label className="inline-flex items-center gap-2.5 text-xs sm:text-sm text-[#164234] cursor-pointer w-fit">
+                  <input
+                    type="checkbox"
+                    checked={galleryFormIsActive}
+                    onChange={(e) => setGalleryFormIsActive(e.target.checked)}
+                    className="w-4 h-4 rounded accent-[#164234] cursor-pointer"
+                  />
+                  <span>Tampilkan foto di galeri halaman Magang</span>
+                </label>
+
+                {galleryError && (
+                  <div className="px-4 py-2.5 rounded-2xl bg-[#9b2c2c]/10 border border-[#9b2c2c]/25 text-xs text-[#9b2c2c]">
+                    {galleryError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setGalleryModalOpen(false)}
+                    className="px-4 py-2 rounded-full bg-[rgba(22,66,52,0.08)] text-[#164234] text-xs sm:text-sm cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingGalleryItem || uploadingGalleryFile}
+                    className="px-5 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs sm:text-sm cursor-pointer disabled:opacity-60"
+                  >
+                    {savingGalleryItem ? 'Menyimpan...' : 'Simpan Foto'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add / Edit Magang Position Modal */}
+      <AnimatePresence>
+        {positionModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setPositionModalOpen(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/30 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-3xl bg-[#FAF8F3] border border-[#C9A45A]/35 p-6 sm:p-7 text-[#164234] shadow-xl relative"
+            >
+              <button
+                type="button"
+                onClick={() => setPositionModalOpen(false)}
+                aria-label="Tutup modal posisi magang"
+                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] flex items-center justify-center cursor-pointer"
+              >
+                <Icon icon="mdi:close" className="w-4 h-4" />
+              </button>
+
+              <div className="flex flex-col gap-1 mb-5 pr-10">
+                <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                  Open Recruitment Magang P2B
+                </span>
+                <h3 className="text-xl font-normal tracking-tight">
+                  {editingPositionItem ? 'Edit Posisi Magang' : 'Tambah Posisi Magang'}
+                </h3>
+              </div>
+
+              <form onSubmit={handleSavePositionItem} className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-2xl bg-white border border-[#C9A45A]/25">
+                  <div className="w-36 h-24 rounded-2xl bg-[#EAE5D7] border border-[#C9A45A]/35 shrink-0 flex items-center justify-center overflow-hidden">
+                    {posFormImageUrl ? (
+                      <img
+                        src={posFormImageUrl}
+                        alt="Pratinjau gambar posisi"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Icon icon="mdi:briefcase-outline" className="w-7 h-7 text-[#164234]/45" />
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2 flex-1 w-full">
+                    <label className="text-xs text-[#3E544B]">
+                      Foto Ilustrasi Posisi (JPG, PNG, atau WebP)
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer transition-colors">
+                        <Icon icon="mdi:upload-outline" className="w-3.5 h-3.5 text-[#F4D993]" />
+                        <span>
+                          {uploadingPosFile ? 'Mengunggah...' : 'Unggah Gambar'}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingPosFile}
+                          onChange={(e) => void handleUploadPositionPhotoFile(e)}
+                          className="hidden"
+                        />
+                      </label>
+                      {posFormImageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setPosFormImageUrl('')}
+                          className="px-3 py-2 rounded-full bg-[#F6F3EC] text-[#9b2c2c] text-xs cursor-pointer"
+                        >
+                          Bersihkan
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={posFormImageUrl}
+                      onChange={(e) => setPosFormImageUrl(e.target.value)}
+                      placeholder="/api/media/... atau /assets/magang/..."
+                      className="px-3.5 py-2 rounded-xl bg-[#FAF8F3] border border-[#C9A45A]/25 text-xs text-[#164234] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {mediaItems.some((m) => m.mimeType.startsWith('image/')) && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-[#3E544B]">
+                      Atau pilih cepat dari Pustaka Media:
+                    </span>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      {mediaItems
+                        .filter((m) => m.mimeType.startsWith('image/'))
+                        .slice(0, 12)
+                        .map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setPosFormImageUrl(m.url)}
+                            title={m.originalName}
+                            className={`w-16 h-12 rounded-xl bg-white border overflow-hidden shrink-0 flex items-center justify-center cursor-pointer transition-colors ${
+                              posFormImageUrl === m.url
+                                ? 'border-[#164234] ring-2 ring-[#164234]/20'
+                                : 'border-[#C9A45A]/25 hover:border-[#164234]/60'
+                            }`}
+                          >
+                            <img
+                              src={m.url}
+                              alt={m.originalName}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-[#3E544B]">Nama Posisi</label>
+                    <input
+                      type="text"
+                      required
+                      value={posFormTitle}
+                      onChange={(e) => setPosFormTitle(e.target.value)}
+                      placeholder="Contoh: Content Creator"
+                      className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-[#3E544B]">Divisi / Bidang</label>
+                    <input
+                      type="text"
+                      value={posFormDivision}
+                      onChange={(e) => setPosFormDivision(e.target.value)}
+                      placeholder="Contoh: Media & Publikasi Digital"
+                      className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="flex flex-col gap-1 sm:col-span-2">
+                    <label className="text-xs text-[#3E544B]">Deskripsi Peran</label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={posFormDescription}
+                      onChange={(e) => setPosFormDescription(e.target.value)}
+                      placeholder="Uraikan tanggung jawab utama posisi magang ini..."
+                      className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-[#3E544B]">Nomor Urut Tampil</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={posFormSortOrder}
+                      onChange={(e) =>
+                        setPosFormSortOrder(Math.max(1, Number(e.target.value) || 1))
+                      }
+                      className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-[#3E544B]">
+                    Daftar Ruang Lingkup / Tugas (1 poin per baris)
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={posFormTasksText}
+                    onChange={(e) => setPosFormTasksText(e.target.value)}
+                    placeholder={`Produksi video reels, TikTok, dan liputan kegiatan unit bisnis\nPenulisan skrip kreatif serta copywriting publikasi digital\nKolaborasi kampanye promosi bersama tim desain grafis`}
+                    className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2.5">
+                  <label className="inline-flex items-center gap-2.5 text-xs sm:text-sm text-[#164234] cursor-pointer w-fit">
+                    <input
+                      type="checkbox"
+                      checked={posFormIsActive}
+                      onChange={(e) => setPosFormIsActive(e.target.checked)}
+                      className="w-4 h-4 rounded accent-[#164234] cursor-pointer"
+                    />
+                    <span>Tampilkan posisi pada halaman Magang P2B</span>
+                  </label>
+
+                  <label className="inline-flex items-center gap-2.5 text-xs sm:text-sm text-[#164234] cursor-pointer w-fit">
+                    <input
+                      type="checkbox"
+                      checked={posFormIsAvailable}
+                      onChange={(e) => setPosFormIsAvailable(e.target.checked)}
+                      className="w-4 h-4 rounded accent-[#164234] cursor-pointer"
+                    />
+                    <span>Opsi posisi tersedia untuk dipilih di formulir pendaftaran</span>
+                  </label>
+                </div>
+
+                {positionError && (
+                  <div className="px-4 py-2.5 rounded-2xl bg-[#9b2c2c]/10 border border-[#9b2c2c]/25 text-xs text-[#9b2c2c]">
+                    {positionError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setPositionModalOpen(false)}
+                    className="px-4 py-2 rounded-full bg-[rgba(22,66,52,0.08)] text-[#164234] text-xs sm:text-sm cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingPositionItem || uploadingPosFile}
+                    className="px-5 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs sm:text-sm cursor-pointer disabled:opacity-60"
+                  >
+                    {savingPositionItem ? 'Menyimpan...' : 'Simpan Posisi'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Applicant Detail Modal */}
+      <AnimatePresence>
+        {selectedApplicant && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedApplicant(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E2A21]/35 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-[#FAF8F3] border border-[#C9A45A]/35 p-6 sm:p-8 text-[#164234] shadow-xl relative flex flex-col gap-5"
+            >
+              <button
+                type="button"
+                onClick={() => setSelectedApplicant(null)}
+                aria-label="Tutup detail pendaftar"
+                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[rgba(22,66,52,0.08)] flex items-center justify-center cursor-pointer"
+              >
+                <Icon icon="mdi:close" className="w-4 h-4" />
+              </button>
+
+              <div className="flex flex-col gap-1 pr-10">
+                <span className="text-xs uppercase tracking-wider text-[#8F6D26] font-mono">
+                  {selectedApplicant.registrationCode} · {selectedApplicant.positionTitle}
+                </span>
+                <h3 className="text-2xl font-normal tracking-tight">
+                  {selectedApplicant.fullName}
+                </h3>
+                <p className="text-xs sm:text-sm text-[#3E544B]">
+                  {selectedApplicant.studyProgram} · Fakultas {selectedApplicant.faculty}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-2xl bg-white border border-[#C9A45A]/25 p-4 text-xs sm:text-sm">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] uppercase tracking-wider text-[#8F6D26]">
+                    Email
+                  </span>
+                  <span className="break-all">{selectedApplicant.email}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] uppercase tracking-wider text-[#8F6D26]">
+                    Nomor Telepon
+                  </span>
+                  <span className="tabular-nums">{selectedApplicant.phone}</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] uppercase tracking-wider text-[#8F6D26]">
+                    Status Seleksi
+                  </span>
+                  <select
+                    value={selectedApplicant.status}
+                    disabled={updatingAppStatusId === selectedApplicant.id}
+                    onChange={(e) =>
+                      void handleUpdateApplicationStatus(
+                        selectedApplicant.id,
+                        e.target.value as MagangApplicationStatus
+                      )
+                    }
+                    className="px-3 py-1.5 rounded-xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-xs text-[#164234] focus:outline-none cursor-pointer"
+                  >
+                    <option value="baru">Baru</option>
+                    <option value="ditinjau">Ditinjau</option>
+                    <option value="diterima">Diterima</option>
+                    <option value="ditolak">Ditolak</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4 text-sm">
+                <div className="rounded-2xl bg-white border border-[#C9A45A]/25 p-4 flex flex-col gap-1.5">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Pemahaman tentang P2B UIN Salatiga
+                  </span>
+                  <p className="text-[#164234] leading-relaxed whitespace-pre-line">
+                    {selectedApplicant.aboutP2b}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white border border-[#C9A45A]/25 p-4 flex flex-col gap-1.5">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Alasan Tertarik pada Posisi {selectedApplicant.positionTitle}
+                  </span>
+                  <p className="text-[#164234] leading-relaxed whitespace-pre-line">
+                    {selectedApplicant.interestReason}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white border border-[#C9A45A]/25 p-4 flex flex-col gap-1.5">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Harapan Selama Magang di P2B UIN Salatiga
+                  </span>
+                  <p className="text-[#164234] leading-relaxed whitespace-pre-line">
+                    {selectedApplicant.expectations}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-white border border-[#C9A45A]/25 p-4 flex flex-col gap-2">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Surat Lamaran / Resume
+                  </span>
+                  {selectedApplicant.resumeFileId && (
+                    <button
+                      type="button"
+                      disabled={downloadingFileKey === selectedApplicant.resumeFileId}
+                      onClick={() =>
+                        selectedApplicant.resumeFileId &&
+                        void handleDownloadApplicantFile(
+                          selectedApplicant.resumeFileId,
+                          selectedApplicant.resumeFileName || 'cv-lamaran'
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs transition-colors cursor-pointer"
+                    >
+                      <Icon icon="mdi:download-outline" className="w-4 h-4 text-[#F4D993]" />
+                      <span className="truncate">
+                        Unduh {selectedApplicant.resumeFileName || 'Berkas CV'}
+                      </span>
+                    </button>
+                  )}
+                  {selectedApplicant.resumeUrl && (
+                    <a
+                      href={selectedApplicant.resumeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-[#164234] underline underline-offset-2 break-all"
+                    >
+                      <Icon icon="mdi:link-variant" className="w-3.5 h-3.5 shrink-0" />
+                      <span>{selectedApplicant.resumeUrl}</span>
+                    </a>
+                  )}
+                </div>
+
+                <div className="rounded-2xl bg-white border border-[#C9A45A]/25 p-4 flex flex-col gap-2">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Portofolio Pelamar
+                  </span>
+                  {selectedApplicant.portfolioFileId && (
+                    <button
+                      type="button"
+                      disabled={downloadingFileKey === selectedApplicant.portfolioFileId}
+                      onClick={() =>
+                        selectedApplicant.portfolioFileId &&
+                        void handleDownloadApplicantFile(
+                          selectedApplicant.portfolioFileId,
+                          selectedApplicant.portfolioFileName || 'portofolio'
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs transition-colors cursor-pointer"
+                    >
+                      <Icon icon="mdi:download-outline" className="w-4 h-4 text-[#F4D993]" />
+                      <span className="truncate">
+                        Unduh {selectedApplicant.portfolioFileName || 'Portofolio'}
+                      </span>
+                    </button>
+                  )}
+                  {selectedApplicant.portfolioUrl && (
+                    <a
+                      href={selectedApplicant.portfolioUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-[#164234] underline underline-offset-2 break-all"
+                    >
+                      <Icon icon="mdi:link-variant" className="w-3.5 h-3.5 shrink-0" />
+                      <span>{selectedApplicant.portfolioUrl}</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedApplicant(null)}
+                  className="px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs sm:text-sm cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}

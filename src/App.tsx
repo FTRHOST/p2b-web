@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
+import { ScrollTrigger } from './lib/gsap';
 import { useRealtimeSync } from './hooks/useRealtimeSync';
 import { Navbar, NavPageTarget } from './components/Navbar';
 import { Hero } from './components/Hero';
@@ -18,14 +19,22 @@ import { AllNewsPage } from './components/AllNewsPage';
 import { AboutPage } from './components/AboutPage';
 import { VisiMisiPage } from './components/VisiMisiPage';
 import { StrukturOrganisasiPage } from './components/StrukturOrganisasiPage';
+import { MagangPage } from './components/MagangPage';
+import { MagangRegisterPage } from './components/MagangRegisterPage';
 import { NewsDetailPage } from './components/NewsDetailPage';
 import { CmsLoginPage } from './components/CmsLoginPage';
 import { CmsDashboard } from './components/CmsDashboard';
 import { NotFoundPage } from './components/NotFoundPage';
 import { allNewsArticles, DEFAULT_NEWS_CATEGORIES, NewsArticle } from './data/news';
 import {
+  DEFAULT_MAGANG_GALLERY,
+  DEFAULT_MAGANG_POSITIONS,
+} from './data/magangDefaults';
+import {
   CmsDatabaseInfo,
   CmsUser,
+  MagangGalleryItem,
+  MagangPositionItem,
   NewsCategoryItem,
   PartnerLogoItem,
   SiteSettings,
@@ -62,6 +71,12 @@ function getRouteFromLocation(pathnameRaw: string, hashRaw: string): RouteState 
   if (cleanPath === '/struktur-organisasi') {
     return { page: 'struktur-organisasi', articleId: null };
   }
+  if (cleanPath === '/magang') {
+    return { page: 'magang', articleId: null };
+  }
+  if (cleanPath === '/magang/daftar') {
+    return { page: 'magang-register', articleId: null };
+  }
   if (cleanPath === '/cms' || cleanPath === '/silahkanmasuk') {
     return { page: 'home', articleId: null };
   }
@@ -80,6 +95,12 @@ function getRouteFromLocation(pathnameRaw: string, hashRaw: string): RouteState 
     if (hashRaw === '#struktur-organisasi') {
       return { page: 'struktur-organisasi', articleId: null };
     }
+    if (hashRaw === '#magang') {
+      return { page: 'magang', articleId: null };
+    }
+    if (hashRaw === '#magang/daftar') {
+      return { page: 'magang-register', articleId: null };
+    }
     return { page: 'home', articleId: null };
   }
 
@@ -91,6 +112,8 @@ const pageToPath: Record<Exclude<NavPageTarget, 'news-detail' | 'not-found'>, st
   about: '/tentang-kami',
   'visi-misi': '/visi-misi',
   'struktur-organisasi': '/struktur-organisasi',
+  magang: '/magang',
+  'magang-register': '/magang/daftar',
   'all-news': '/semua-berita',
 };
 
@@ -128,6 +151,12 @@ export default function App() {
       isActive: true,
     },
   ]);
+  const [magangGallery, setMagangGallery] = useState<MagangGalleryItem[]>(
+    DEFAULT_MAGANG_GALLERY
+  );
+  const [magangPositions, setMagangPositions] = useState<MagangPositionItem[]>(
+    DEFAULT_MAGANG_POSITIONS
+  );
   const [siteSettings, setSiteSettings] = useState<SiteSettings>({});
   const [bootstrapReady, setBootstrapReady] = useState<boolean>(false);
   const [route, setRoute] = useState<RouteState>(() =>
@@ -165,6 +194,8 @@ export default function App() {
         news?: NewsArticle[];
         categories?: NewsCategoryItem[];
         partnerLogos?: PartnerLogoItem[];
+        magangGallery?: MagangGalleryItem[];
+        magangPositions?: MagangPositionItem[];
         settings?: SiteSettings;
       };
       if (data.ok) {
@@ -179,6 +210,12 @@ export default function App() {
         }
         if (Array.isArray(data.partnerLogos)) {
           setPartnerLogos(data.partnerLogos);
+        }
+        if (Array.isArray(data.magangGallery)) {
+          setMagangGallery(data.magangGallery);
+        }
+        if (Array.isArray(data.magangPositions)) {
+          setMagangPositions(data.magangPositions);
         }
         if (data.settings) {
           setSiteSettings(data.settings);
@@ -416,6 +453,25 @@ export default function App() {
   const effectivePage: NavPageTarget = isArticleNotFound ? 'not-found' : route.page;
   const selectedArticle = matchedArticle;
 
+  // Keep GSAP ScrollTrigger positions synced across font loading, SPA routes, and CMS updates
+  useEffect(() => {
+    let active = true;
+    const rafId = window.requestAnimationFrame(() => {
+      ScrollTrigger.refresh();
+    });
+
+    if ('fonts' in document && document.fonts?.ready) {
+      void document.fonts.ready.then(() => {
+        if (active) ScrollTrigger.refresh();
+      });
+    }
+
+    return () => {
+      active = false;
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [pathname, effectivePage, newsArticles.length, siteSettings, bootstrapReady]);
+
   // Dynamic OpenGraph, Twitter Card, Canonical & Schema.org JSON-LD synchronization
   useEffect(() => {
     const origin = window.location.origin;
@@ -512,6 +568,26 @@ export default function App() {
         description:
           'Susunan manajemen, tata kelola, dan unit pelaksana bisnis di lingkungan Pusat Pengembangan Bisnis UIN Salatiga.',
         path: '/struktur-organisasi',
+      });
+      return;
+    }
+
+    if (route.page === 'magang') {
+      applyPageSeo({
+        title: 'Magang di P2B — Open Recruitment P2B UIN Salatiga',
+        description:
+          'Informasi open recruitment magang Pusat Pengembangan Bisnis (P2B) UIN Salatiga posisi Content Creator, Graphic Designer, dan Office Administrator.',
+        path: '/magang',
+      });
+      return;
+    }
+
+    if (route.page === 'magang-register') {
+      applyPageSeo({
+        title: 'Formulir Pendaftaran Magang — P2B UIN Salatiga',
+        description:
+          'Daftar program magang Pusat Pengembangan Bisnis (P2B) UIN Salatiga dan unggah lamaran serta portofolio Anda.',
+        path: '/magang/daftar',
       });
       return;
     }
@@ -668,6 +744,21 @@ export default function App() {
         <StrukturOrganisasiPage
           settings={siteSettings}
           onOpenAbout={() => navigateToPage('about')}
+          onNavigateSection={navigateToSection}
+        />
+      ) : effectivePage === 'magang' ? (
+        <MagangPage
+          settings={siteSettings}
+          galleryItems={magangGallery}
+          positions={magangPositions}
+          onOpenRegisterPage={() => navigateToPage('magang-register')}
+          onNavigateSection={navigateToSection}
+        />
+      ) : effectivePage === 'magang-register' ? (
+        <MagangRegisterPage
+          settings={siteSettings}
+          positions={magangPositions}
+          onBackToMagang={() => navigateToPage('magang')}
           onNavigateSection={navigateToSection}
         />
       ) : (

@@ -1,7 +1,7 @@
 import { Icon } from '@iconify/react';
-import { motion } from 'motion/react';
 import { CardCornerPattern } from './CardCornerPattern';
 import { SiteSettings } from '../types/cms';
+import { ScrollWordTitle } from './ScrollWordTitle';
 
 interface VisiCardProps {
   settings?: SiteSettings;
@@ -9,13 +9,7 @@ interface VisiCardProps {
 
 export function VisiCard({ settings }: VisiCardProps) {
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 18 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.2 }}
-      transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-      className="group relative overflow-hidden rounded-[1.5rem] md:rounded-[3rem] bg-gradient-to-br from-[#0F3126] via-[#164234] to-[#1D5442] border border-[#C9A45A]/35 p-7 sm:p-10 md:p-14 text-[#FAF8F3] flex flex-col gap-5"
-    >
+    <section className="group relative overflow-hidden rounded-[1.5rem] md:rounded-[3rem] bg-gradient-to-br from-[#0F3126] via-[#164234] to-[#1D5442] border border-[#C9A45A]/35 p-7 sm:p-10 md:p-14 text-[#FAF8F3] flex flex-col gap-5">
       <CardCornerPattern
         index={3}
         position="top-right"
@@ -31,15 +25,20 @@ export function VisiCard({ settings }: VisiCardProps) {
         </span>
       </div>
 
-      <h2 className="relative z-10 text-2xl sm:text-3xl md:text-4xl lg:text-[42px] font-normal tracking-tight leading-[1.2] max-w-5xl text-balance">
-        {settings?.page_visimisi_visi_text?.trim() ||
-          'Menjadi pusat pengembangan bisnis universitas yang profesional, inovatif, dan berkelanjutan dalam mendukung kemandirian serta peningkatan nilai tambah kelembagaan UIN Salatiga.'}
-      </h2>
+      <ScrollWordTitle
+        as="h2"
+        text={
+          settings?.page_visimisi_visi_text?.trim() ||
+          'Menjadi pusat pengembangan bisnis universitas yang profesional, inovatif, dan berkelanjutan dalam mendukung kemandirian serta peningkatan nilai tambah kelembagaan UIN Salatiga.'
+        }
+        duration={0.58}
+        className="relative z-10 text-2xl sm:text-3xl md:text-4xl lg:text-[42px] font-normal tracking-tight leading-[1.2] max-w-5xl text-balance"
+      />
 
       <p className="relative z-10 text-sm sm:text-base text-[#F6F3EC]/85 max-w-3xl leading-relaxed">
         {settings?.page_visimisi_visi_subtext?.trim() ||
           'Sebagai bagian dari ekosistem entrepreneurial university PTN BLU, P2B menyelaraskan pertumbuhan pendapatan universitas dengan peningkatan kualitas layanan publik serta pengembangan kompetensi generasi muda.'}
       </p>
-    </motion.section>
+    </section>
   );
 }

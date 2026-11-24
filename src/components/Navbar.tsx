@@ -10,6 +10,8 @@ export type NavPageTarget =
   | 'about'
   | 'visi-misi'
   | 'struktur-organisasi'
+  | 'magang'
+  | 'magang-register'
   | 'all-news'
   | 'news-detail'
   | 'not-found';
@@ -41,6 +43,7 @@ export function Navbar({
 }: NavbarProps) {
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileExpandedId, setMobileExpandedId] = useState<number | null>(null);
   const [logoFailed, setLogoFailed] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
@@ -78,6 +81,12 @@ export function Navbar({
     setScrolled(window.scrollY > 24);
     lastScrollYRef.current = Math.max(window.scrollY, 0);
   }, [currentPage, currentPath]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      setMobileExpandedId(null);
+    }
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const onScroll = () => {
@@ -121,8 +130,12 @@ export function Navbar({
     if (item.actionType !== 'page' && item.actionType !== 'url') return false;
     if (!item.target.trim().startsWith('/')) return false;
     const normalized = normalizeTargetPath(item.target);
+    const currentNormalized = normalizeTargetPath(currentPath);
     if (normalized === '/' && item.parentId !== null) return false;
-    return normalized === normalizeTargetPath(currentPath);
+    if (normalized === '/magang' && currentNormalized === '/magang/daftar') {
+      return true;
+    }
+    return normalized === currentNormalized;
   };
 
   const handleOpenContact = () => {
@@ -244,7 +257,7 @@ export function Navbar({
           </div>
 
           {/* Desktop Center Dynamic Navigation */}
-          <ul className="hidden md:flex items-center gap-8 text-[#FAF8F3] font-normal text-sm">
+          <ul className="hidden md:flex items-center gap-4 lg:gap-6 xl:gap-8 text-[#FAF8F3] font-normal text-xs lg:text-sm">
             {topLevelItems.map((item) => {
               const children = getChildrenFor(item.id);
               const hasDropdown =
@@ -263,6 +276,8 @@ export function Navbar({
                   {hasDropdown ? (
                     <button
                       type="button"
+                      aria-expanded={openDropdownId === item.id}
+                      aria-haspopup="true"
                       onClick={() => {
                         if (item.target.trim() && item.actionType !== 'dropdown') {
                           executeNavAction(item);
@@ -425,36 +440,105 @@ export function Navbar({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
-                className="md:hidden absolute top-full left-0 right-0 mt-2 rounded-2xl bg-white/95 backdrop-blur-xl border border-[#C9A45A]/30 p-4 shadow-lg z-30 flex flex-col gap-3"
+                className="md:hidden absolute top-full left-0 right-0 mt-2 max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain rounded-2xl bg-white/95 backdrop-blur-xl border border-[#C9A45A]/30 p-3 sm:p-4 shadow-lg z-30 flex flex-col gap-1"
               >
                 {topLevelItems.map((item) => {
                   const children = getChildrenFor(item.id);
                   const hasDropdown =
                     item.actionType === 'dropdown' || children.length > 0;
+                  const isExpanded = mobileExpandedId === item.id;
+                  const isActive =
+                    isTargetCurrent(item) ||
+                    children.some((child) => isTargetCurrent(child));
+
                   return (
-                    <div key={item.id} className="flex flex-col gap-1.5">
+                    <div key={item.id} className="flex flex-col">
                       {hasDropdown && children.length > 0 ? (
                         <>
-                          <span className="text-xs uppercase tracking-wider text-[#8F6D26] px-2">
-                            {item.label}
-                          </span>
-                          <div className="flex flex-col gap-1 pl-2">
-                            {children.map((sub) => (
-                              <div key={sub.id}>
-                                {renderExternalLinkOrButton(
-                                  sub,
-                                  'w-full block text-left text-sm text-[#164234] py-1.5 px-2 rounded-lg hover:bg-[#F6F3EC] transition-colors cursor-pointer',
-                                  <span>{sub.label}</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            onClick={() =>
+                              setMobileExpandedId((prev) =>
+                                prev === item.id ? null : item.id
+                              )
+                            }
+                            className={`w-full flex items-center justify-between gap-2 text-left text-sm font-normal py-2.5 px-3 rounded-xl transition-colors cursor-pointer ${
+                              isExpanded || isActive
+                                ? 'bg-[#F6F3EC] text-[#164234]'
+                                : 'text-[#164234] hover:bg-[#F6F3EC]'
+                            }`}
+                          >
+                            <span className="truncate">{item.label}</span>
+                            <Icon
+                              icon="mdi:chevron-down"
+                              className={`w-4 h-4 text-[#8F6D26] shrink-0 transition-transform duration-200 ${
+                                isExpanded ? 'rotate-180' : ''
+                              }`}
+                            />
+                          </button>
+
+                          <AnimatePresence initial={false}>
+                            {isExpanded && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2, ease: 'easeOut' }}
+                                className="overflow-hidden"
+                              >
+                                <div className="flex flex-col gap-1 ml-3 pl-2.5 py-1.5 border-l-2 border-[#C9A45A]/35">
+                                  {children.map((sub) => {
+                                    const subActive = isTargetCurrent(sub);
+                                    return (
+                                      <div key={sub.id}>
+                                        {renderExternalLinkOrButton(
+                                          sub,
+                                          `w-full block text-left py-2 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                                            subActive
+                                              ? 'bg-[#F6F3EC]'
+                                              : 'hover:bg-[#F6F3EC]'
+                                          }`,
+                                          <>
+                                            <div className="text-[13px] font-normal text-[#164234] flex items-center justify-between gap-2">
+                                              <span className="break-words">{sub.label}</span>
+                                              {subActive && (
+                                                <span className="text-[10px] text-[#8F6D26] shrink-0">
+                                                  Aktif
+                                                </span>
+                                              )}
+                                            </div>
+                                            {sub.subtitle && (
+                                              <div className="text-[11px] font-normal text-[#3E544B]/75 mt-0.5 leading-snug">
+                                                {sub.subtitle}
+                                              </div>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </>
                       ) : (
                         renderExternalLinkOrButton(
                           item,
-                          'w-full block text-left text-sm text-[#164234] py-1.5 px-2 rounded-lg hover:bg-[#F6F3EC] transition-colors cursor-pointer',
-                          <span>{item.label}</span>
+                          `w-full flex items-center justify-between text-left text-sm font-normal py-2.5 px-3 rounded-xl transition-colors cursor-pointer ${
+                            isActive
+                              ? 'bg-[#F6F3EC] text-[#164234]'
+                              : 'text-[#164234] hover:bg-[#F6F3EC]'
+                          }`,
+                          <>
+                            <span className="truncate">{item.label}</span>
+                            {isActive && (
+                              <span className="text-[10px] text-[#8F6D26] shrink-0">
+                                Aktif
+                              </span>
+                            )}
+                          </>
                         )
                       )}
                     </div>

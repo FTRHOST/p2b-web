@@ -3,6 +3,7 @@ import { Icon } from '@iconify/react';
 import { motion } from 'motion/react';
 import { NewsArticle } from '../data/news';
 import { CardCornerPattern } from './CardCornerPattern';
+import { ScrollWordTitle } from './ScrollWordTitle';
 
 interface EditorialNewsCardProps {
   article: NewsArticle;
@@ -35,8 +36,6 @@ export function EditorialNewsCard({
     e.preventDefault();
     onSelectArticle(article.id);
   };
-
-  const HeadingTag = headingAs;
 
   const cardBody = (
     <article className="nup-card group" aria-labelledby={titleId}>
@@ -99,9 +98,15 @@ export function EditorialNewsCard({
             href={articleHref}
             onClick={handleNavigate}
           >
-            <HeadingTag id={titleId} className="nup-card__headline">
-              {article.title}
-            </HeadingTag>
+            <ScrollWordTitle
+              as={headingAs}
+              id={titleId}
+              text={article.title}
+              inlineGroup
+              start="top 94%"
+              duration={0.56}
+              className="nup-card__headline"
+            />
           </a>
 
           <p className="nup-card__summary">{article.excerpt}</p>

@@ -8,6 +8,7 @@ import { Footer } from './Footer';
 import { EditorialNewsCard } from './EditorialNewsCard';
 import { CardCornerPattern } from './CardCornerPattern';
 import { SiteSettings } from '../types/cms';
+import { ScrollWordTitle } from './ScrollWordTitle';
 
 function getPatternSeed(key: string): number {
   let hash = 0;
@@ -177,9 +178,11 @@ export function NewsDetailPage({
                       <Icon icon="mdi:image-multiple-outline" className="w-3.5 h-3.5" />
                       <span>Galeri Kegiatan</span>
                     </span>
-                    <h2 className="text-xl sm:text-2xl font-normal text-[#164234] tracking-tight">
-                      Dokumentasi Foto ({article.gallery.length})
-                    </h2>
+                    <ScrollWordTitle
+                      as="h2"
+                      text={`Dokumentasi Foto (${article.gallery.length})`}
+                      className="text-xl sm:text-2xl font-normal text-[#164234] tracking-tight"
+                    />
                   </div>
                 </div>
 
@@ -218,9 +221,11 @@ export function NewsDetailPage({
                     <Icon icon="mdi:file-document-outline" className="w-3.5 h-3.5" />
                     <span>Berkas Pendukung</span>
                   </span>
-                  <h2 className="text-xl sm:text-2xl font-normal text-[#164234] tracking-tight">
-                    Lampiran Dokumen PDF ({article.attachments.length})
-                  </h2>
+                  <ScrollWordTitle
+                    as="h2"
+                    text={`Lampiran Dokumen PDF (${article.attachments.length})`}
+                    className="text-xl sm:text-2xl font-normal text-[#164234] tracking-tight"
+                  />
                 </div>
 
                 <div className="flex flex-col gap-3">
@@ -316,9 +321,11 @@ export function NewsDetailPage({
                 <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
                   Baca Juga
                 </span>
-                <h2 className="text-2xl sm:text-3xl font-normal text-[#164234] tracking-tight">
-                  Berita P2B Lainnya
-                </h2>
+                <ScrollWordTitle
+                  as="h2"
+                  text="Berita P2B Lainnya"
+                  className="text-2xl sm:text-3xl font-normal text-[#164234] tracking-tight"
+                />
               </div>
 
               <button

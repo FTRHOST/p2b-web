@@ -196,6 +196,82 @@ const SEED_PARTNER_LOGOS = [
   },
 ];
 
+const SEED_MAGANG_GALLERY = [
+  {
+    title: 'Kolaborasi & Perencanaan Program',
+    caption:
+      'Sesi brainstorming lintas divisi mahasiswa magang dalam merancang kampanye dan evaluasi unit usaha.',
+    image_url: '/assets/magang/galeri_diskusi.jpg',
+    alt_text: 'Mahasiswa magang P2B UIN Salatiga berdiskusi merencanakan program kerja tim',
+    sort_order: 1,
+  },
+  {
+    title: 'Produksi Konten Digital',
+    caption: 'Dokumentasi video pendek dan liputan aktivitas layanan P2B di area kampus.',
+    image_url: '/assets/magang/role_konten.jpg',
+    alt_text: 'Anak magang divisi Content Creator memproduksi video promosi unit usaha P2B',
+    sort_order: 2,
+  },
+  {
+    title: 'Eksplorasi Desain & Visual Branding',
+    caption:
+      'Penyusunan materi poster, identitas visual, dan konten grafis untuk publikasi resmi.',
+    image_url: '/assets/magang/role_desain.jpg',
+    alt_text: 'Anak magang divisi Graphic Designer mengerjakan layout publikasi visual',
+    sort_order: 3,
+  },
+  {
+    title: 'Koordinasi Administrasi Harian',
+    caption:
+      'Pengelolaan jadwal layanan, dokumentasi surat, dan pencatatan operasional kantor P2B.',
+    image_url: '/assets/magang/role_admin.jpg',
+    alt_text: 'Anak magang divisi Office Administrator mengelola jadwal dan arsip operasional',
+    sort_order: 4,
+  },
+];
+
+const SEED_MAGANG_POSITIONS = [
+  {
+    title: 'Content Creator',
+    division: 'Media & Publikasi Digital',
+    description:
+      'Merancang konsep kreatif, memproduksi video pendek, foto dokumentasi, serta konten media sosial untuk memperkenalkan unit usaha dan layanan P2B UIN Salatiga.',
+    image_url: '/assets/magang/role_konten.jpg',
+    tasks: [
+      'Produksi video reels, TikTok, dan liputan kegiatan unit bisnis',
+      'Penulisan skrip kreatif serta copywriting publikasi digital',
+      'Kolaborasi kampanye promosi bersama tim desain grafis',
+    ],
+    sort_order: 1,
+  },
+  {
+    title: 'Graphic Designer',
+    division: 'Desain Komunikasi Visual',
+    description:
+      'Mengembangkan materi komunikasi visual resmi mulai dari poster acara, konten media sosial, hingga kebutuhan branding produk dan layanan komersial P2B.',
+    image_url: '/assets/magang/role_desain.jpg',
+    tasks: [
+      'Perancangan poster, feed media sosial, dan media cetak',
+      'Menjaga konsistensi identitas visual P2B UIN Salatiga',
+      'Pengolahan materi presentasi serta promosi layanan usaha',
+    ],
+    sort_order: 2,
+  },
+  {
+    title: 'Office Administrator',
+    division: 'Tata Kelola & Administrasi',
+    description:
+      'Mendukung pengelolaan administrasi perkantoran, pengarsipan dokumen layanan, pencatatan jadwal operasional, serta koordinasi harian di lingkungan P2B.',
+    image_url: '/assets/magang/role_admin.jpg',
+    tasks: [
+      'Pengarsipan dokumen resmi, surat-menyurat, dan berkas mitra',
+      'Pendataan jadwal reservasi fasilitas dan koordinasi internal',
+      'Penyusunan rekapitulasi laporan administrasi berkala',
+    ],
+    sort_order: 3,
+  },
+];
+
 interface SessionPayload {
   userId: number;
   username: string;
@@ -388,6 +464,84 @@ async function ensureDatabaseReady(): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cms_magang_gallery (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(180) NOT NULL,
+        caption TEXT NOT NULL,
+        image_url TEXT NOT NULL,
+        alt_text VARCHAR(255) NULL,
+        sort_order INT NOT NULL DEFAULT 100,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cms_magang_positions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(160) NOT NULL,
+        division VARCHAR(160) NOT NULL,
+        description TEXT NOT NULL,
+        image_url TEXT NOT NULL,
+        tasks_json LONGTEXT NOT NULL,
+        sort_order INT NOT NULL DEFAULT 100,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        is_available TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    const [isAvailColRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'cms_magang_positions' AND COLUMN_NAME = 'is_available'`,
+      [DB_NAME]
+    );
+    if (Number(isAvailColRows[0]?.cnt || 0) === 0) {
+      await pool.query(
+        'ALTER TABLE cms_magang_positions ADD COLUMN is_available TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active'
+      );
+    }
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cms_magang_applicant_files (
+        id VARCHAR(48) PRIMARY KEY,
+        original_name VARCHAR(255) NOT NULL,
+        mime_type VARCHAR(120) NOT NULL,
+        size_bytes INT NOT NULL,
+        data LONGBLOB NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cms_magang_applications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        registration_code VARCHAR(32) NOT NULL UNIQUE,
+        full_name VARCHAR(160) NOT NULL,
+        email VARCHAR(180) NOT NULL,
+        phone VARCHAR(40) NOT NULL,
+        study_program VARCHAR(160) NOT NULL,
+        faculty VARCHAR(160) NOT NULL,
+        about_p2b TEXT NOT NULL,
+        position_id INT NULL,
+        position_title VARCHAR(160) NOT NULL,
+        interest_reason TEXT NOT NULL,
+        resume_file_id VARCHAR(48) NULL,
+        resume_file_name VARCHAR(255) NULL,
+        resume_url TEXT NULL,
+        portfolio_file_id VARCHAR(48) NULL,
+        portfolio_file_name VARCHAR(255) NULL,
+        portfolio_url TEXT NULL,
+        expectations TEXT NOT NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'baru',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
     // Seed initial admin user if empty
     const [userCountRows] = await pool.query<RowDataPacket[]>(
       'SELECT COUNT(*) AS total FROM cms_users'
@@ -464,6 +618,41 @@ async function ensureDatabaseReady(): Promise<void> {
           `INSERT INTO cms_partner_logos (name, logo_url, link_url, sort_order, is_active)
            VALUES (?, ?, ?, ?, 1)`,
           [logo.name, logo.logo_url, logo.link_url || null, logo.sort_order]
+        );
+      }
+    }
+
+    // Seed magang gallery if empty
+    const [magangGalleryCountRows] = await pool.query<RowDataPacket[]>(
+      'SELECT COUNT(*) AS total FROM cms_magang_gallery'
+    );
+    if (Number(magangGalleryCountRows[0]?.total || 0) === 0) {
+      for (const item of SEED_MAGANG_GALLERY) {
+        await pool.query(
+          `INSERT INTO cms_magang_gallery (title, caption, image_url, alt_text, sort_order, is_active)
+           VALUES (?, ?, ?, ?, ?, 1)`,
+          [item.title, item.caption, item.image_url, item.alt_text, item.sort_order]
+        );
+      }
+    }
+
+    // Seed magang positions if empty
+    const [magangPosCountRows] = await pool.query<RowDataPacket[]>(
+      'SELECT COUNT(*) AS total FROM cms_magang_positions'
+    );
+    if (Number(magangPosCountRows[0]?.total || 0) === 0) {
+      for (const pos of SEED_MAGANG_POSITIONS) {
+        await pool.query(
+          `INSERT INTO cms_magang_positions (title, division, description, image_url, tasks_json, sort_order, is_active, is_available)
+           VALUES (?, ?, ?, ?, ?, ?, 1, 1)`,
+          [
+            pos.title,
+            pos.division,
+            pos.description,
+            pos.image_url,
+            JSON.stringify(pos.tasks),
+            pos.sort_order,
+          ]
         );
       }
     }
@@ -583,6 +772,77 @@ function mapPartnerLogoRow(row: RowDataPacket) {
   };
 }
 
+function mapMagangGalleryRow(row: RowDataPacket) {
+  return {
+    id: Number(row.id),
+    title: String(row.title),
+    caption: String(row.caption || ''),
+    imageUrl: String(row.image_url),
+    altText: row.alt_text ? String(row.alt_text) : String(row.title),
+    sortOrder: Number(row.sort_order),
+    isActive: Boolean(row.is_active),
+  };
+}
+
+function mapMagangPositionRow(row: RowDataPacket) {
+  let tasks: string[] = [];
+  if (row.tasks_json) {
+    try {
+      const parsed = JSON.parse(String(row.tasks_json));
+      if (Array.isArray(parsed)) {
+        tasks = parsed.map((t) => String(t).trim()).filter(Boolean);
+      }
+    } catch {
+      tasks = [];
+    }
+  }
+  return {
+    id: Number(row.id),
+    title: String(row.title),
+    division: String(row.division || ''),
+    description: String(row.description || ''),
+    imageUrl: String(row.image_url),
+    tasks,
+    sortOrder: Number(row.sort_order),
+    isActive: Boolean(row.is_active),
+    isAvailable: row.is_available === undefined ? true : Boolean(row.is_available),
+  };
+}
+
+function mapMagangApplicationRow(row: RowDataPacket) {
+  return {
+    id: Number(row.id),
+    registrationCode: String(row.registration_code),
+    fullName: String(row.full_name),
+    email: String(row.email),
+    phone: String(row.phone),
+    studyProgram: String(row.study_program),
+    faculty: String(row.faculty),
+    aboutP2b: String(row.about_p2b),
+    positionId: row.position_id ? Number(row.position_id) : null,
+    positionTitle: String(row.position_title),
+    interestReason: String(row.interest_reason),
+    resumeFileId: row.resume_file_id ? String(row.resume_file_id) : null,
+    resumeFileName: row.resume_file_name ? String(row.resume_file_name) : null,
+    resumeUrl: row.resume_url ? String(row.resume_url) : null,
+    portfolioFileId: row.portfolio_file_id ? String(row.portfolio_file_id) : null,
+    portfolioFileName: row.portfolio_file_name ? String(row.portfolio_file_name) : null,
+    portfolioUrl: row.portfolio_url ? String(row.portfolio_url) : null,
+    expectations: String(row.expectations),
+    status: String(row.status || 'baru'),
+    createdAt: String(row.created_at),
+  };
+}
+
+function isSafeHttpUrl(raw: string): boolean {
+  try {
+    const parsed = new URL(raw.trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function slugifyTitle(input: string): string {
   const base = input
     .toLowerCase()
@@ -665,6 +925,10 @@ async function getPublicDataVersion(): Promise<{
         (SELECT COALESCE(MAX(created_at), '1970-01-01') FROM cms_news_categories) AS cat_ts,
         (SELECT COUNT(*) FROM cms_partner_logos) AS logo_count,
         (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_partner_logos) AS logo_ts,
+        (SELECT COUNT(*) FROM cms_magang_gallery) AS mg_count,
+        (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_magang_gallery) AS mg_ts,
+        (SELECT COUNT(*) FROM cms_magang_positions) AS mp_count,
+        (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_magang_positions) AS mp_ts,
         (SELECT COUNT(*) FROM cms_site_settings) AS settings_count,
         (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_site_settings) AS settings_ts,
         (SELECT COUNT(*) FROM cms_media) AS media_count
@@ -677,6 +941,10 @@ async function getPublicDataVersion(): Promise<{
       r.cat_ts,
       r.logo_count,
       r.logo_ts,
+      r.mg_count,
+      r.mg_ts,
+      r.mp_count,
+      r.mp_ts,
       r.settings_count,
       r.settings_ts,
       r.media_count,
@@ -697,7 +965,15 @@ async function getPublicDataVersion(): Promise<{
 }
 
 async function notifyCmsDataCommitted(
-  domain: 'news' | 'categories' | 'logos' | 'media' | 'settings',
+  domain:
+    | 'news'
+    | 'categories'
+    | 'logos'
+    | 'magang_gallery'
+    | 'magang_positions'
+    | 'magang_applications'
+    | 'media'
+    | 'settings',
   action: string,
   entityId?: string | number
 ): Promise<void> {
@@ -1243,6 +1519,12 @@ async function startServer() {
       const [logoRows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_partner_logos WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
       );
+      const [magangGalleryRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_gallery WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
+      );
+      const [magangPositionRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_positions WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
+      );
       const [settings, versionInfo] = await Promise.all([
         fetchSiteSettingsMap(),
         getPublicDataVersion(),
@@ -1255,6 +1537,8 @@ async function startServer() {
         news: newsRows.map(mapNewsRow),
         settings,
         partnerLogos: logoRows.map(mapPartnerLogoRow),
+        magangGallery: magangGalleryRows.map(mapMagangGalleryRow),
+        magangPositions: magangPositionRows.map(mapMagangPositionRow),
         categories: categoryRows.map((c) => ({
           id: Number(c.id),
           name: String(c.name),
@@ -1267,6 +1551,248 @@ async function startServer() {
         message: err instanceof Error ? err.message : 'Gagal memuat konten.',
       });
     }
+  });
+
+  // Public Internship Application Submission (multipart/form-data with optional PDF/DOC/image resume & portfolio)
+  const ALLOWED_APPLICANT_MIMES = new Set([
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ]);
+  const APPLICANT_FACULTIES = new Set([
+    'Ekonomi dan Bisnis Syariah',
+    'Dakwah',
+    'Tarbiah dan Ilmu Keguruan',
+    'Ushuluddin, Adab dan Humaniora',
+    'Syariah',
+    'Sains dan Teknologi',
+  ]);
+
+  app.post('/api/public/magang/apply', (req: Request, res: Response) => {
+    upload.fields([
+      { name: 'resumeFile', maxCount: 1 },
+      { name: 'portfolioFile', maxCount: 1 },
+    ])(req, res, async (uploadErr: unknown) => {
+      if (uploadErr) {
+        const msg = uploadErr instanceof Error ? uploadErr.message : 'Gagal mengunggah berkas pendaftaran.';
+        res.status(400).json({
+          ok: false,
+          message: msg.includes('File too large')
+            ? 'Ukuran masing-masing berkas maksimal 12 MB.'
+            : msg,
+        });
+        return;
+      }
+
+      if (!dbReady) {
+        await ensureDatabaseReady();
+      }
+      if (!dbReady) {
+        res.status(503).json({
+          ok: false,
+          message: 'Layanan pendaftaran sedang mengalami gangguan koneksi database.',
+        });
+        return;
+      }
+
+      const body = (req.body || {}) as Record<string, unknown>;
+      const fullName = String(body.fullName || '').trim().slice(0, 160);
+      const email = String(body.email || '').trim().slice(0, 180);
+      const phone = String(body.phone || '').trim().slice(0, 40);
+      const studyProgram = String(body.studyProgram || '').trim().slice(0, 160);
+      const faculty = String(body.faculty || '').trim().slice(0, 160);
+      const aboutP2b = String(body.aboutP2b || '').trim().slice(0, 4000);
+      const positionId = Number(body.positionId);
+      const interestReason = String(body.interestReason || '').trim().slice(0, 4000);
+      const resumeUrlRaw = String(body.resumeUrl || '').trim().slice(0, 1000);
+      const portfolioUrlRaw = String(body.portfolioUrl || '').trim().slice(0, 1000);
+      const expectations = String(body.expectations || '').trim().slice(0, 4000);
+
+      if (!fullName || !email || !phone || !studyProgram || !faculty || !aboutP2b || !interestReason || !expectations) {
+        res.status(400).json({
+          ok: false,
+          message: 'Seluruh kolom wajib formulir pendaftaran magang harus diisi.',
+        });
+        return;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        res.status(400).json({ ok: false, message: 'Format alamat email tidak valid.' });
+        return;
+      }
+
+      if (phone.replace(/[^0-9]/g, '').length < 8) {
+        res.status(400).json({ ok: false, message: 'Nomor telepon minimal terdiri dari 8 digit.' });
+        return;
+      }
+
+      if (!APPLICANT_FACULTIES.has(faculty)) {
+        res.status(400).json({ ok: false, message: 'Pilihan fakultas tidak valid.' });
+        return;
+      }
+
+      if (!Number.isInteger(positionId) || positionId <= 0) {
+        res.status(400).json({ ok: false, message: 'Silakan pilih posisi magang yang tersedia.' });
+        return;
+      }
+
+      const filesMap = (req.files || {}) as Record<string, Express.Multer.File[]>;
+      const resumeFile = filesMap.resumeFile?.[0] || null;
+      const portfolioFile = filesMap.portfolioFile?.[0] || null;
+
+      if (resumeFile && !ALLOWED_APPLICANT_MIMES.has(resumeFile.mimetype)) {
+        res.status(400).json({
+          ok: false,
+          message: 'Format berkas lamaran/resume harus berupa PDF, DOC/DOCX, atau gambar (JPG/PNG/WebP).',
+        });
+        return;
+      }
+      if (portfolioFile && !ALLOWED_APPLICANT_MIMES.has(portfolioFile.mimetype)) {
+        res.status(400).json({
+          ok: false,
+          message: 'Format berkas portofolio harus berupa PDF, DOC/DOCX, atau gambar (JPG/PNG/WebP).',
+        });
+        return;
+      }
+
+      if (resumeUrlRaw && !isSafeHttpUrl(resumeUrlRaw)) {
+        res.status(400).json({
+          ok: false,
+          message: 'Tautan surat lamaran/resume harus diawali http:// atau https://.',
+        });
+        return;
+      }
+      if (portfolioUrlRaw && !isSafeHttpUrl(portfolioUrlRaw)) {
+        res.status(400).json({
+          ok: false,
+          message: 'Tautan portofolio harus diawali http:// atau https://.',
+        });
+        return;
+      }
+
+      if (!resumeFile && !resumeUrlRaw) {
+        res.status(400).json({
+          ok: false,
+          message: 'Harap unggah berkas atau sertakan tautan surat lamaran/resume Anda.',
+        });
+        return;
+      }
+      if (!portfolioFile && !portfolioUrlRaw) {
+        res.status(400).json({
+          ok: false,
+          message: 'Harap unggah berkas atau sertakan tautan portofolio Anda.',
+        });
+        return;
+      }
+
+      try {
+        const [posRows] = await pool.query<RowDataPacket[]>(
+          'SELECT id, title, is_active, is_available FROM cms_magang_positions WHERE id = ? LIMIT 1',
+          [positionId]
+        );
+        if (posRows.length === 0 || !Boolean(posRows[0].is_active)) {
+          res.status(400).json({
+            ok: false,
+            message: 'Posisi magang yang dipilih tidak ditemukan.',
+          });
+          return;
+        }
+        if (!Boolean(posRows[0].is_available)) {
+          res.status(400).json({
+            ok: false,
+            message: `Maaf, posisi "${String(posRows[0].title)}" saat ini sedang tidak tersedia / kuota penuh.`,
+          });
+          return;
+        }
+
+        const positionTitle = String(posRows[0].title);
+        let resumeFileId: string | null = null;
+        let resumeFileName: string | null = null;
+        let portfolioFileId: string | null = null;
+        let portfolioFileName: string | null = null;
+
+        if (resumeFile) {
+          resumeFileId = crypto.randomBytes(12).toString('hex');
+          resumeFileName =
+            path
+              .basename(resumeFile.originalname || 'resume.pdf')
+              .replace(/[^a-zA-Z0-9._-]/g, '_')
+              .slice(0, 120) || 'resume';
+          await pool.query(
+            'INSERT INTO cms_magang_applicant_files (id, original_name, mime_type, size_bytes, data) VALUES (?, ?, ?, ?, ?)',
+            [resumeFileId, resumeFileName, resumeFile.mimetype, resumeFile.size, resumeFile.buffer]
+          );
+        }
+
+        if (portfolioFile) {
+          portfolioFileId = crypto.randomBytes(12).toString('hex');
+          portfolioFileName =
+            path
+              .basename(portfolioFile.originalname || 'portofolio.pdf')
+              .replace(/[^a-zA-Z0-9._-]/g, '_')
+              .slice(0, 120) || 'portofolio';
+          await pool.query(
+            'INSERT INTO cms_magang_applicant_files (id, original_name, mime_type, size_bytes, data) VALUES (?, ?, ?, ?, ?)',
+            [
+              portfolioFileId,
+              portfolioFileName,
+              portfolioFile.mimetype,
+              portfolioFile.size,
+              portfolioFile.buffer,
+            ]
+          );
+        }
+
+        const registrationCode = `MGG-${new Date().getFullYear()}-${crypto
+          .randomBytes(3)
+          .toString('hex')
+          .toUpperCase()}`;
+
+        const [insertResult] = await pool.query<ResultSetHeader>(
+          `INSERT INTO cms_magang_applications
+            (registration_code, full_name, email, phone, study_program, faculty, about_p2b, position_id, position_title, interest_reason, resume_file_id, resume_file_name, resume_url, portfolio_file_id, portfolio_file_name, portfolio_url, expectations, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'baru')`,
+          [
+            registrationCode,
+            fullName,
+            email,
+            phone,
+            studyProgram,
+            faculty,
+            aboutP2b,
+            positionId,
+            positionTitle,
+            interestReason,
+            resumeFileId,
+            resumeFileName,
+            resumeUrlRaw || null,
+            portfolioFileId,
+            portfolioFileName,
+            portfolioUrlRaw || null,
+            expectations,
+          ]
+        );
+
+        await notifyCmsDataCommitted('magang_applications', 'created', insertResult.insertId);
+        res.status(201).json({
+          ok: true,
+          registrationCode,
+          positionTitle,
+          message: 'Pendaftaran magang Anda berhasil dikirim.',
+        });
+      } catch (err) {
+        res.status(500).json({
+          ok: false,
+          message:
+            err instanceof Error
+              ? err.message
+              : 'Gagal menyimpan pendaftaran magang.',
+        });
+      }
+    });
   });
 
   // CMS Authentication
@@ -2365,6 +2891,481 @@ async function startServer() {
     }
   });
 
+  // CMS Magang Gallery CRUD & Reordering
+  app.get('/api/cms/magang-gallery', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_gallery ORDER BY sort_order ASC, id ASC'
+      );
+      res.json({ ok: true, items: rows.map(mapMagangGalleryRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memuat galeri foto magang.',
+      });
+    }
+  });
+
+  app.post('/api/cms/magang-gallery', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const { title, caption, imageUrl, altText, sortOrder, isActive } = req.body as {
+      title?: string;
+      caption?: string;
+      imageUrl?: string;
+      altText?: string;
+      sortOrder?: number;
+      isActive?: boolean;
+    };
+
+    if (!title?.trim() || !imageUrl?.trim()) {
+      res.status(400).json({ ok: false, message: 'Judul foto dan gambar galeri wajib diisi.' });
+      return;
+    }
+
+    try {
+      let nextOrder = Number(sortOrder);
+      if (!Number.isFinite(nextOrder) || nextOrder <= 0) {
+        const [maxRows] = await pool.query<RowDataPacket[]>(
+          'SELECT COALESCE(MAX(sort_order), 0) AS maxOrder FROM cms_magang_gallery'
+        );
+        nextOrder = Number(maxRows[0]?.maxOrder || 0) + 1;
+      }
+
+      const [result] = await pool.query<ResultSetHeader>(
+        `INSERT INTO cms_magang_gallery (title, caption, image_url, alt_text, sort_order, is_active)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          title.trim().slice(0, 180),
+          (caption || '').trim(),
+          imageUrl.trim(),
+          (altText || title).trim().slice(0, 255),
+          nextOrder,
+          isActive === false ? 0 : 1,
+        ]
+      );
+
+      const [inserted] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_gallery WHERE id = ? LIMIT 1',
+        [result.insertId]
+      );
+      await notifyCmsDataCommitted('magang_gallery', 'created', result.insertId);
+      res.status(201).json({ ok: true, item: mapMagangGalleryRow(inserted[0]) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menambahkan foto galeri magang.',
+      });
+    }
+  });
+
+  app.patch('/api/cms/magang-gallery/reorder', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const { orderedIds } = req.body as { orderedIds?: unknown[] };
+    const cleanIds = Array.isArray(orderedIds)
+      ? orderedIds.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
+      : [];
+
+    if (cleanIds.length === 0) {
+      res.status(400).json({ ok: false, message: 'Urutan ID foto galeri tidak valid.' });
+      return;
+    }
+
+    try {
+      const caseParts = cleanIds.map(() => 'WHEN ? THEN ?').join(' ');
+      const inPlaceholders = cleanIds.map(() => '?').join(', ');
+      const caseParams: number[] = [];
+      cleanIds.forEach((id, idx) => {
+        caseParams.push(id, idx + 1);
+      });
+      await pool.query(
+        `UPDATE cms_magang_gallery SET sort_order = CASE id ${caseParts} ELSE sort_order END WHERE id IN (${inPlaceholders})`,
+        [...caseParams, ...cleanIds]
+      );
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_gallery ORDER BY sort_order ASC, id ASC'
+      );
+      await notifyCmsDataCommitted('magang_gallery', 'reordered');
+      res.json({ ok: true, items: rows.map(mapMagangGalleryRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menyimpan urutan galeri magang.',
+      });
+    }
+  });
+
+  app.put('/api/cms/magang-gallery/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const itemId = Number(req.params.id);
+    if (!Number.isFinite(itemId)) {
+      res.status(400).json({ ok: false, message: 'ID foto galeri tidak valid.' });
+      return;
+    }
+
+    const { title, caption, imageUrl, altText, sortOrder, isActive } = req.body as {
+      title?: string;
+      caption?: string;
+      imageUrl?: string;
+      altText?: string;
+      sortOrder?: number;
+      isActive?: boolean;
+    };
+
+    if (!title?.trim() || !imageUrl?.trim()) {
+      res.status(400).json({ ok: false, message: 'Judul foto dan gambar galeri wajib diisi.' });
+      return;
+    }
+
+    const orderNum =
+      Number.isFinite(Number(sortOrder)) && Number(sortOrder) > 0 ? Number(sortOrder) : 1;
+
+    try {
+      await pool.query(
+        `UPDATE cms_magang_gallery
+         SET title = ?, caption = ?, image_url = ?, alt_text = ?, sort_order = ?, is_active = ?
+         WHERE id = ?`,
+        [
+          title.trim().slice(0, 180),
+          (caption || '').trim(),
+          imageUrl.trim(),
+          (altText || title).trim().slice(0, 255),
+          orderNum,
+          isActive === false ? 0 : 1,
+          itemId,
+        ]
+      );
+
+      const [updated] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_gallery WHERE id = ? LIMIT 1',
+        [itemId]
+      );
+      if (updated.length === 0) {
+        res.status(404).json({ ok: false, message: 'Foto galeri tidak ditemukan.' });
+        return;
+      }
+      await notifyCmsDataCommitted('magang_gallery', 'updated', itemId);
+      res.json({ ok: true, item: mapMagangGalleryRow(updated[0]) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memperbarui foto galeri.',
+      });
+    }
+  });
+
+  app.delete('/api/cms/magang-gallery/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const itemId = Number(req.params.id);
+    if (!Number.isFinite(itemId)) {
+      res.status(400).json({ ok: false, message: 'ID foto galeri tidak valid.' });
+      return;
+    }
+    try {
+      await pool.query('DELETE FROM cms_magang_gallery WHERE id = ?', [itemId]);
+      await notifyCmsDataCommitted('magang_gallery', 'deleted', itemId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menghapus foto galeri.',
+      });
+    }
+  });
+
+  // CMS Magang Positions CRUD & Reordering
+  app.get('/api/cms/magang-positions', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_positions ORDER BY sort_order ASC, id ASC'
+      );
+      res.json({ ok: true, items: rows.map(mapMagangPositionRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memuat posisi magang.',
+      });
+    }
+  });
+
+  app.post('/api/cms/magang-positions', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const { title, division, description, imageUrl, tasks, sortOrder, isActive, isAvailable } = req.body as {
+      title?: string;
+      division?: string;
+      description?: string;
+      imageUrl?: string;
+      tasks?: unknown[];
+      sortOrder?: number;
+      isActive?: boolean;
+      isAvailable?: boolean;
+    };
+
+    if (!title?.trim() || !description?.trim() || !imageUrl?.trim()) {
+      res.status(400).json({ ok: false, message: 'Nama posisi, deskripsi, dan gambar wajib diisi.' });
+      return;
+    }
+
+    const cleanTasks = Array.isArray(tasks)
+      ? tasks.map((t) => String(t).trim()).filter(Boolean)
+      : [];
+
+    try {
+      let nextOrder = Number(sortOrder);
+      if (!Number.isFinite(nextOrder) || nextOrder <= 0) {
+        const [maxRows] = await pool.query<RowDataPacket[]>(
+          'SELECT COALESCE(MAX(sort_order), 0) AS maxOrder FROM cms_magang_positions'
+        );
+        nextOrder = Number(maxRows[0]?.maxOrder || 0) + 1;
+      }
+
+      const [result] = await pool.query<ResultSetHeader>(
+        `INSERT INTO cms_magang_positions (title, division, description, image_url, tasks_json, sort_order, is_active, is_available)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          title.trim().slice(0, 160),
+          (division || 'Unit Bisnis P2B').trim().slice(0, 160),
+          description.trim(),
+          imageUrl.trim(),
+          JSON.stringify(cleanTasks),
+          nextOrder,
+          isActive === false ? 0 : 1,
+          isAvailable === false ? 0 : 1,
+        ]
+      );
+
+      const [inserted] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_positions WHERE id = ? LIMIT 1',
+        [result.insertId]
+      );
+      await notifyCmsDataCommitted('magang_positions', 'created', result.insertId);
+      res.status(201).json({ ok: true, item: mapMagangPositionRow(inserted[0]) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menambahkan posisi magang.',
+      });
+    }
+  });
+
+  app.patch('/api/cms/magang-positions/reorder', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const { orderedIds } = req.body as { orderedIds?: unknown[] };
+    const cleanIds = Array.isArray(orderedIds)
+      ? orderedIds.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
+      : [];
+
+    if (cleanIds.length === 0) {
+      res.status(400).json({ ok: false, message: 'Urutan ID posisi magang tidak valid.' });
+      return;
+    }
+
+    try {
+      const caseParts = cleanIds.map(() => 'WHEN ? THEN ?').join(' ');
+      const inPlaceholders = cleanIds.map(() => '?').join(', ');
+      const caseParams: number[] = [];
+      cleanIds.forEach((id, idx) => {
+        caseParams.push(id, idx + 1);
+      });
+      await pool.query(
+        `UPDATE cms_magang_positions SET sort_order = CASE id ${caseParts} ELSE sort_order END WHERE id IN (${inPlaceholders})`,
+        [...caseParams, ...cleanIds]
+      );
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_positions ORDER BY sort_order ASC, id ASC'
+      );
+      await notifyCmsDataCommitted('magang_positions', 'reordered');
+      res.json({ ok: true, items: rows.map(mapMagangPositionRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menyimpan urutan posisi magang.',
+      });
+    }
+  });
+
+  app.put('/api/cms/magang-positions/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const posId = Number(req.params.id);
+    if (!Number.isFinite(posId)) {
+      res.status(400).json({ ok: false, message: 'ID posisi magang tidak valid.' });
+      return;
+    }
+
+    const { title, division, description, imageUrl, tasks, sortOrder, isActive, isAvailable } = req.body as {
+      title?: string;
+      division?: string;
+      description?: string;
+      imageUrl?: string;
+      tasks?: unknown[];
+      sortOrder?: number;
+      isActive?: boolean;
+      isAvailable?: boolean;
+    };
+
+    if (!title?.trim() || !description?.trim() || !imageUrl?.trim()) {
+      res.status(400).json({ ok: false, message: 'Nama posisi, deskripsi, dan gambar wajib diisi.' });
+      return;
+    }
+
+    const cleanTasks = Array.isArray(tasks)
+      ? tasks.map((t) => String(t).trim()).filter(Boolean)
+      : [];
+    const orderNum =
+      Number.isFinite(Number(sortOrder)) && Number(sortOrder) > 0 ? Number(sortOrder) : 1;
+
+    try {
+      await pool.query(
+        `UPDATE cms_magang_positions
+         SET title = ?, division = ?, description = ?, image_url = ?, tasks_json = ?, sort_order = ?, is_active = ?, is_available = ?
+         WHERE id = ?`,
+        [
+          title.trim().slice(0, 160),
+          (division || 'Unit Bisnis P2B').trim().slice(0, 160),
+          description.trim(),
+          imageUrl.trim(),
+          JSON.stringify(cleanTasks),
+          orderNum,
+          isActive === false ? 0 : 1,
+          isAvailable === false ? 0 : 1,
+          posId,
+        ]
+      );
+
+      const [updated] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_positions WHERE id = ? LIMIT 1',
+        [posId]
+      );
+      if (updated.length === 0) {
+        res.status(404).json({ ok: false, message: 'Posisi magang tidak ditemukan.' });
+        return;
+      }
+      await notifyCmsDataCommitted('magang_positions', 'updated', posId);
+      res.json({ ok: true, item: mapMagangPositionRow(updated[0]) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memperbarui posisi magang.',
+      });
+    }
+  });
+
+  app.delete('/api/cms/magang-positions/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const posId = Number(req.params.id);
+    if (!Number.isFinite(posId)) {
+      res.status(400).json({ ok: false, message: 'ID posisi magang tidak valid.' });
+      return;
+    }
+    try {
+      await pool.query('DELETE FROM cms_magang_positions WHERE id = ?', [posId]);
+      await notifyCmsDataCommitted('magang_positions', 'deleted', posId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menghapus posisi magang.',
+      });
+    }
+  });
+
+  // CMS Magang Applications Review & Secure File Download
+  app.get('/api/cms/magang-applications', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_applications ORDER BY created_at DESC, id DESC'
+      );
+      res.json({ ok: true, items: rows.map(mapMagangApplicationRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memuat daftar pendaftar magang.',
+      });
+    }
+  });
+
+  app.patch('/api/cms/magang-applications/:id/status', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const appId = Number(req.params.id);
+    const { status } = req.body as { status?: string };
+    const allowedStatuses = new Set(['baru', 'ditinjau', 'diterima', 'ditolak']);
+    if (!Number.isFinite(appId) || !status || !allowedStatuses.has(status)) {
+      res.status(400).json({ ok: false, message: 'ID atau status pendaftaran tidak valid.' });
+      return;
+    }
+    try {
+      await pool.query('UPDATE cms_magang_applications SET status = ? WHERE id = ?', [status, appId]);
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_magang_applications WHERE id = ? LIMIT 1',
+        [appId]
+      );
+      if (rows.length === 0) {
+        res.status(404).json({ ok: false, message: 'Data pendaftar tidak ditemukan.' });
+        return;
+      }
+      await notifyCmsDataCommitted('magang_applications', 'status_updated', appId);
+      res.json({ ok: true, item: mapMagangApplicationRow(rows[0]) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memperbarui status pendaftar.',
+      });
+    }
+  });
+
+  app.delete('/api/cms/magang-applications/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const appId = Number(req.params.id);
+    if (!Number.isFinite(appId)) {
+      res.status(400).json({ ok: false, message: 'ID pendaftar tidak valid.' });
+      return;
+    }
+    try {
+      const [existingRows] = await pool.query<RowDataPacket[]>(
+        'SELECT resume_file_id, portfolio_file_id FROM cms_magang_applications WHERE id = ? LIMIT 1',
+        [appId]
+      );
+      await pool.query('DELETE FROM cms_magang_applications WHERE id = ?', [appId]);
+      const fileIds = [
+        existingRows[0]?.resume_file_id ? String(existingRows[0].resume_file_id) : '',
+        existingRows[0]?.portfolio_file_id ? String(existingRows[0].portfolio_file_id) : '',
+      ].filter(Boolean);
+      if (fileIds.length > 0) {
+        const placeholders = fileIds.map(() => '?').join(',');
+        await pool.query(
+          `DELETE FROM cms_magang_applicant_files WHERE id IN (${placeholders})`,
+          fileIds
+        );
+      }
+      await notifyCmsDataCommitted('magang_applications', 'deleted', appId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menghapus data pendaftar.',
+      });
+    }
+  });
+
+  app.get('/api/cms/magang-files/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const fileId = String(req.params.id || '').trim();
+    if (!fileId || !/^[a-zA-Z0-9_-]{4,48}$/.test(fileId)) {
+      res.status(400).json({ ok: false, message: 'ID berkas tidak valid.' });
+      return;
+    }
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT original_name, mime_type, size_bytes, data FROM cms_magang_applicant_files WHERE id = ? LIMIT 1',
+        [fileId]
+      );
+      if (rows.length === 0) {
+        res.status(404).send('Berkas pendaftar tidak ditemukan.');
+        return;
+      }
+      const row = rows[0];
+      const buffer = Buffer.isBuffer(row.data)
+        ? row.data
+        : Buffer.from(row.data as Uint8Array);
+      const safeName = String(row.original_name || 'berkas').replace(/"/g, '');
+      res.setHeader('Content-Type', String(row.mime_type || 'application/octet-stream'));
+      res.setHeader('Content-Length', String(buffer.length));
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+      res.send(buffer);
+    } catch {
+      res.status(500).send('Gagal mengunduh berkas pendaftar.');
+    }
+  });
+
   // CMS Site Settings Read & Update
   app.get('/api/cms/settings', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
     try {
@@ -2485,7 +3486,10 @@ async function startServer() {
         postalCode: '50716',
         addressCountry: 'ID',
       },
-      sameAs: ['https://www.instagram.com/p2b.uinsalatiga'],
+      sameAs: [
+        'https://www.instagram.com/p2b.uinsalatiga',
+        'https://www.tiktok.com/@p2b.uin.salatiga',
+      ],
       description,
     };
 
@@ -2507,6 +3511,10 @@ async function startServer() {
       title = 'Struktur Organisasi — P2B UIN Salatiga';
       description =
         'Susunan manajemen, tata kelola, dan unit pelaksana bisnis di lingkungan Pusat Pengembangan Bisnis UIN Salatiga.';
+    } else if (cleanPath === '/magang') {
+      title = 'Magang di P2B — Open Recruitment P2B UIN Salatiga';
+      description =
+        'Informasi open recruitment magang Pusat Pengembangan Bisnis (P2B) UIN Salatiga posisi Content Creator, Graphic Designer, dan Office Administrator.';
     } else if (cleanPath === '/semua-berita') {
       title = 'Semua Berita & Update — P2B UIN Salatiga';
       description =
@@ -2681,6 +3689,7 @@ async function startServer() {
       { path: '/tentang-kami', priority: '0.8', changefreq: 'monthly' },
       { path: '/visi-misi', priority: '0.8', changefreq: 'monthly' },
       { path: '/struktur-organisasi', priority: '0.8', changefreq: 'monthly' },
+      { path: '/magang', priority: '0.8', changefreq: 'weekly' },
       { path: '/semua-berita', priority: '0.9', changefreq: 'daily' },
     ];
 
