@@ -1,4 +1,13 @@
 import { NewsArticle } from '../data/news';
+import type { CmsPermission, CmsRoleKey } from '../lib/authRoles';
+export type {
+  BuilderPageSlug,
+  HomeBlockType,
+  HomeBlockItem,
+  HomeBlockPresetItem,
+} from '../data/homeBuilderDefaults';
+export type { TarifItem } from '../data/tarifDefaults';
+export type { CmsPermission, CmsRoleKey } from '../lib/authRoles';
 
 export interface SiteSettings {
   hero_title?: string;
@@ -56,10 +65,25 @@ export interface CmsNavItem {
 }
 
 export interface CmsUser {
-  id: number;
+  id: string;
   username: string;
   displayName: string;
-  role: string;
+  email?: string;
+  role: CmsRoleKey;
+  roleLabel?: string;
+  permissions?: CmsPermission[];
+}
+
+export interface ManagedCmsUser {
+  id: string;
+  name: string;
+  username: string;
+  displayUsername?: string;
+  email: string;
+  role: CmsRoleKey;
+  banned: boolean;
+  banReason?: string | null;
+  createdAt: string;
 }
 
 export interface CmsDatabaseInfo {

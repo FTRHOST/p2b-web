@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@iconify/react';
 import { motion, AnimatePresence } from 'motion/react';
 import { defaultNavItems } from '../data/defaultNav';
-import { CmsNavItem, SiteSettings } from '../types/cms';
+import { CmsNavItem, SiteSettings, TarifItem } from '../types/cms';
 import { CardCornerPattern } from './CardCornerPattern';
 
 export type NavPageTarget =
@@ -25,6 +25,7 @@ interface NavbarProps {
   currentPage: NavPageTarget;
   currentPath: string;
   navItems?: CmsNavItem[];
+  tarifItems?: TarifItem[];
   settings?: SiteSettings;
   onNavigatePage: (page: NavPageTarget) => void;
   onNavigateTarget: (target: string) => void;
@@ -39,6 +40,7 @@ export function Navbar({
   currentPage,
   currentPath,
   navItems = defaultNavItems,
+  tarifItems,
   settings,
   onNavigatePage,
   onNavigateTarget,
@@ -122,11 +124,30 @@ export function Navbar({
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 
-  const getChildrenFor = (parentId: number) =>
-    activeNav
+  const getChildrenFor = (parentId: number) => {
+    if (parentId === 8 && Array.isArray(tarifItems)) {
+      return tarifItems
+        .filter((t) => t.isActive !== false)
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)
+        .map<CmsNavItem>((t, idx) => ({
+          id: 80000 + (t.id || idx + 1),
+          parentId: 8,
+          label: t.navLabel,
+          subtitle: t.docNumber || t.shortLabel,
+          actionType: 'page',
+          target: `/tarif-layanan/${t.slug}`,
+          description: t.description || '',
+          openNewTab: false,
+          sortOrder: t.sortOrder || idx + 1,
+          isActive: true,
+        }));
+    }
+    return activeNav
       .filter((item) => item.parentId === parentId)
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+  };
 
   const isTargetCurrent = (item: CmsNavItem): boolean => {
     if (item.actionType !== 'page' && item.actionType !== 'url') return false;
@@ -138,8 +159,16 @@ export function Navbar({
       return true;
     }
     if (
-      normalized === '/tarif-layanan/penunjang-akademik' &&
-      currentNormalized === '/tarif-layanan'
+      normalized === '/tarif-layanan' &&
+      currentNormalized.startsWith('/tarif-layanan/')
+    ) {
+      return true;
+    }
+    if (
+      currentNormalized === '/tarif-layanan' &&
+      Array.isArray(tarifItems) &&
+      tarifItems.length > 0 &&
+      normalized === `/tarif-layanan/${tarifItems[0].slug}`
     ) {
       return true;
     }

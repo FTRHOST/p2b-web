@@ -1,7 +1,4 @@
-export type TarifCategorySlug =
-  | 'penunjang-akademik'
-  | 'klinik-mitra-insani'
-  | 'jurnal';
+export type TarifCategorySlug = string;
 
 export const DEFAULT_TARIF_HERO_IMAGE =
   'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/Auditorium-Student-Centre-di-Salatiga.png';
@@ -19,99 +16,92 @@ export const DEFAULT_TARIF_PENUNJANG_DRIVE_URL =
 export const DEFAULT_TARIF_PENUNJANG_LOCAL_PDF =
   '/assets/aistudio/SK-R-29-TH2024-Tarif_Layanan_Penunjang_Akademik_b447f880.pdf';
 
-export interface TarifCategoryConfig {
-  slug: TarifCategorySlug;
+export interface TarifItem {
+  id: number;
+  slug: string;
   navLabel: string;
   shortLabel: string;
-  defaultTitle: string;
-  defaultDocNumber: string;
-  defaultDescription: string;
-  defaultPdfUrl: string;
+  title: string;
+  docNumber: string;
+  description: string;
+  pdfUrl: string;
   localFallbackPdfUrl?: string;
-  settingKeys: {
-    pdfUrl:
-      | 'tarif_penunjang_pdf_url'
-      | 'tarif_klinik_pdf_url'
-      | 'tarif_jurnal_pdf_url';
-    title:
-      | 'tarif_penunjang_title'
-      | 'tarif_klinik_title'
-      | 'tarif_jurnal_title';
-    docNumber:
-      | 'tarif_penunjang_doc_number'
-      | 'tarif_klinik_doc_number'
-      | 'tarif_jurnal_doc_number';
-    description:
-      | 'tarif_penunjang_description'
-      | 'tarif_klinik_description'
-      | 'tarif_jurnal_description';
-  };
+  sortOrder: number;
+  isActive: boolean;
 }
 
-export const TARIF_CATEGORIES: TarifCategoryConfig[] = [
+export const DEFAULT_TARIF_ITEMS: TarifItem[] = [
   {
+    id: 1,
     slug: 'penunjang-akademik',
     navLabel: 'Tarif Layanan Penunjang Akademik',
     shortLabel: 'Penunjang Akademik',
-    defaultTitle: 'Tarif Layanan Penunjang Akademik UIN Salatiga',
-    defaultDocNumber: 'Keputusan Rektor UIN Salatiga Nomor 29 Tahun 2024',
-    defaultDescription:
+    title: 'Tarif Layanan Penunjang Akademik UIN Salatiga',
+    docNumber: 'Keputusan Rektor UIN Salatiga Nomor 29 Tahun 2024',
+    description:
       'Ketentuan resmi tarif pemanfaatan aset dan layanan penunjang akademik meliputi Gedung Auditorium Student Centre, Aula Kampus 1, Ruang Theater, Lapangan Olahraga, Ruang Kelas/Lab, Kantin, Bahasa, Lembaga Produk Halal, Poliklinik, dan layanan penunjang lainnya.',
-    defaultPdfUrl: DEFAULT_TARIF_PENUNJANG_DRIVE_URL,
+    pdfUrl: DEFAULT_TARIF_PENUNJANG_DRIVE_URL,
     localFallbackPdfUrl: DEFAULT_TARIF_PENUNJANG_LOCAL_PDF,
-    settingKeys: {
-      pdfUrl: 'tarif_penunjang_pdf_url',
-      title: 'tarif_penunjang_title',
-      docNumber: 'tarif_penunjang_doc_number',
-      description: 'tarif_penunjang_description',
-    },
+    sortOrder: 1,
+    isActive: true,
   },
   {
+    id: 2,
     slug: 'klinik-mitra-insani',
     navLabel: 'Tarif Layanan Klinik Mitra Insani',
     shortLabel: 'Klinik Mitra Insani',
-    defaultTitle: 'Tarif Layanan Klinik Mitra Insani UIN Salatiga',
-    defaultDocNumber: 'Standar Tarif Layanan Kesehatan P2B',
-    defaultDescription:
+    title: 'Tarif Layanan Klinik Mitra Insani UIN Salatiga',
+    docNumber: 'Standar Tarif Layanan Kesehatan P2B',
+    description:
       'Daftar tarif pelayanan pemeriksaan kesehatan umum, poli gigi, poli ibu dan anak, pemeriksaan laboratorium dasar, serta layanan kesehatan Klinik Mitra Insani bagi sivitas akademika dan masyarakat umum.',
-    defaultPdfUrl: '',
-    settingKeys: {
-      pdfUrl: 'tarif_klinik_pdf_url',
-      title: 'tarif_klinik_title',
-      docNumber: 'tarif_klinik_doc_number',
-      description: 'tarif_klinik_description',
-    },
+    pdfUrl: '',
+    localFallbackPdfUrl: '',
+    sortOrder: 2,
+    isActive: true,
   },
   {
+    id: 3,
     slug: 'jurnal',
     navLabel: 'Tarif Jurnal',
     shortLabel: 'Tarif Jurnal',
-    defaultTitle: 'Tarif Publikasi & Pengelolaan Jurnal Ilmiah',
-    defaultDocNumber: 'Ketentuan Tarif Layanan Jurnal P2B UIN Salatiga',
-    defaultDescription:
+    title: 'Tarif Publikasi & Pengelolaan Jurnal Ilmiah',
+    docNumber: 'Ketentuan Tarif Layanan Jurnal P2B UIN Salatiga',
+    description:
       'Pedoman tarif layanan tata kelola, penerbitan, penyuntingan, proofreading, serta kerja sama pengelolaan jurnal ilmiah di lingkungan Universitas Islam Negeri Salatiga.',
-    defaultPdfUrl: '',
-    settingKeys: {
-      pdfUrl: 'tarif_jurnal_pdf_url',
-      title: 'tarif_jurnal_title',
-      docNumber: 'tarif_jurnal_doc_number',
-      description: 'tarif_jurnal_description',
-    },
+    pdfUrl: '',
+    localFallbackPdfUrl: '',
+    sortOrder: 3,
+    isActive: true,
   },
 ];
 
-export function isValidTarifSlug(raw?: string | null): raw is TarifCategorySlug {
-  return (
-    raw === 'penunjang-akademik' ||
-    raw === 'klinik-mitra-insani' ||
-    raw === 'jurnal'
-  );
+export function slugifyTarifLabel(input: string): string {
+  const cleaned = input
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80);
+  return cleaned || `tarif-${Date.now().toString(36).slice(-4)}`;
 }
 
-export function getTarifCategoryBySlug(slug?: string | null): TarifCategoryConfig {
-  return (
-    TARIF_CATEGORIES.find((item) => item.slug === slug) || TARIF_CATEGORIES[0]
-  );
+export function isValidTarifSlug(raw?: string | null): raw is TarifCategorySlug {
+  const trimmed = (raw || '').trim();
+  return /^[a-z0-9][a-z0-9-]{0,100}$/i.test(trimmed);
+}
+
+export function getTarifItemBySlug(
+  items: TarifItem[],
+  slug?: string | null
+): TarifItem | null {
+  const pool = items.length > 0 ? items : DEFAULT_TARIF_ITEMS;
+  if (slug) {
+    const exact = pool.find((item) => item.slug === slug);
+    if (exact) return exact;
+  }
+  return pool[0] || null;
 }
 
 export interface ResolvedPdfSource {

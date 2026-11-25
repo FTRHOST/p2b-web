@@ -135,7 +135,13 @@ export function Hero({
           <BottomRightCorner
             label={cornerLabel?.trim() || 'Profil P2B'}
             actionLabel={cornerActionLabel?.trim() || 'Tentang Kami'}
-            href={cornerHref?.trim() || '/tentang-kami'}
+            href={
+              cornerHref?.trim() &&
+              !cornerHref.trim().toLowerCase().startsWith('javascript:') &&
+              !cornerHref.trim().toLowerCase().startsWith('data:')
+                ? cornerHref.trim()
+                : '/tentang-kami'
+            }
             onOpenProfile={onOpenAbout}
           />
         </div>

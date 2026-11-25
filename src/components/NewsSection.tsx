@@ -7,23 +7,36 @@ import { ScrollWordTitle } from './ScrollWordTitle';
 interface NewsSectionProps {
   articles?: NewsArticle[];
   categories?: string[];
+  sectionId?: string;
+  eyebrow?: string;
+  heading?: string;
+  ctaLabel?: string;
+  maxItems?: number;
   onViewAllNews: () => void;
   onSelectArticle: (articleId: string) => void;
 }
 
 export function NewsSection({
   articles = allNewsArticles,
+  sectionId = 'news-updates',
+  eyebrow = 'Berita & Informasi Terbaru',
+  heading = 'News & Update',
+  ctaLabel = 'Lihat Semua Berita',
+  maxItems = 3,
   onViewAllNews,
   onSelectArticle,
 }: NewsSectionProps) {
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
-  // Tampilkan maksimal 3 berita terbaru di beranda
-  const latestArticles = articles.slice(0, 3);
+  const safeLimit =
+    Number.isFinite(Number(maxItems)) && Number(maxItems) > 0
+      ? Math.min(12, Number(maxItems))
+      : 3;
+  const latestArticles = articles.slice(0, safeLimit);
 
   return (
     <section
-      id="news-updates"
+      id={sectionId}
       className="w-full flex justify-center px-3 md:px-5 pb-12 md:pb-20 bg-[#F6F3EC]"
     >
       <div className="w-full max-w-[1536px] flex flex-col gap-8 md:gap-10">
@@ -31,11 +44,11 @@ export function NewsSection({
         <div className="px-3 md:px-6 flex flex-col sm:flex-row sm:items-end justify-between gap-5">
           <div className="flex flex-col gap-2">
             <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
-              Berita & Informasi Terbaru
+              {eyebrow.trim() || 'Berita & Informasi Terbaru'}
             </span>
             <ScrollWordTitle
               as="h2"
-              text="News & Update"
+              text={heading.trim() || 'News & Update'}
               className="text-3xl sm:text-4xl md:text-5xl lg:text-[56px] font-normal text-[#164234] tracking-tight leading-[1.06]"
             />
           </div>
@@ -53,7 +66,7 @@ export function NewsSection({
               className="nup-cta"
             >
               <span className="nup-cta__label">
-                Lihat Semua Berita
+                {ctaLabel.trim() || 'Lihat Semua Berita'}
               </span>
               <span className="nup-cta__icon" aria-hidden="true">
                 <Icon icon="mdi:arrow-right" className="w-full h-full" />

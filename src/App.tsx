@@ -8,17 +8,8 @@ import { MotionConfig } from 'motion/react';
 import { ScrollTrigger } from './lib/gsap';
 import { useRealtimeSync } from './hooks/useRealtimeSync';
 import { Navbar, NavPageTarget } from './components/Navbar';
-import { Hero } from './components/Hero';
-import { LogoMarqueeSection } from './components/LogoMarqueeSection';
-import { WhoWeAre } from './components/WhoWeAre';
-import { NewsSection } from './components/NewsSection';
-import { LocationSection } from './components/LocationSection';
-import { VisiCard } from './components/VisiCard';
-import { Footer } from './components/Footer';
+import { HomePageRenderer } from './components/HomePageRenderer';
 import { AllNewsPage } from './components/AllNewsPage';
-import { AboutPage } from './components/AboutPage';
-import { VisiMisiPage } from './components/VisiMisiPage';
-import { StrukturOrganisasiPage } from './components/StrukturOrganisasiPage';
 import { MagangPage } from './components/MagangPage';
 import { MagangRegisterPage } from './components/MagangRegisterPage';
 import { KerjasamaPage } from './components/KerjasamaPage';
@@ -27,16 +18,30 @@ import { NewsDetailPage } from './components/NewsDetailPage';
 import { CmsLoginPage } from './components/CmsLoginPage';
 import { CmsDashboard } from './components/CmsDashboard';
 import { NotFoundPage } from './components/NotFoundPage';
+import {
+  authClient,
+  clearInMemoryAuthToken,
+  getInMemoryAuthToken,
+  setInMemoryAuthToken,
+} from './lib/authClient';
 import { allNewsArticles, DEFAULT_NEWS_CATEGORIES, NewsArticle } from './data/news';
 import {
   DEFAULT_MAGANG_GALLERY,
   DEFAULT_MAGANG_POSITIONS,
 } from './data/magangDefaults';
 import {
+  DEFAULT_TARIF_ITEMS,
   TarifCategorySlug,
-  getTarifCategoryBySlug,
+  TarifItem,
+  getTarifItemBySlug,
   isValidTarifSlug,
 } from './data/tarifDefaults';
+import {
+  BuilderPageSlug,
+  DEFAULT_HOME_BLOCKS,
+  HomeBlockItem,
+  getDefaultBlocksWithIds,
+} from './data/homeBuilderDefaults';
 import {
   CmsDatabaseInfo,
   CmsUser,
@@ -53,8 +58,6 @@ interface RouteState {
   articleId: string | null;
   tarifCategory?: TarifCategorySlug;
 }
-
-const CMS_TOKEN_KEY = 'p2b_cms_token';
 
 function normalizePathname(raw: string): string {
   const cleaned = raw.replace(/\/+$/, '');
@@ -86,7 +89,6 @@ function getRouteFromLocation(pathnameRaw: string, hashRaw: string): RouteState 
     return {
       page: 'tarif-layanan',
       articleId: null,
-      tarifCategory: 'penunjang-akademik',
     };
   }
   if (cleanPath.startsWith('/tarif-layanan/')) {
@@ -205,23 +207,15 @@ export default function App() {
     DEFAULT_MAGANG_POSITIONS
   );
   const [siteSettings, setSiteSettings] = useState<SiteSettings>({});
+  const [homeBlocks, setHomeBlocks] = useState<HomeBlockItem[]>(DEFAULT_HOME_BLOCKS);
+  const [tarifItems, setTarifItems] = useState<TarifItem[]>(DEFAULT_TARIF_ITEMS);
   const [bootstrapReady, setBootstrapReady] = useState<boolean>(false);
   const [route, setRoute] = useState<RouteState>(() =>
     getRouteFromLocation(window.location.pathname, window.location.hash)
   );
 
-  // CMS Auth State
-  const [cmsToken, setCmsToken] = useState<string>(() => {
-    try {
-      return (
-        window.localStorage.getItem(CMS_TOKEN_KEY) ||
-        window.sessionStorage.getItem(CMS_TOKEN_KEY) ||
-        ''
-      );
-    } catch {
-      return '';
-    }
-  });
+  // CMS Auth State (token held strictly in React/JS memory; Better Auth manages HttpOnly session cookie)
+  const [cmsToken, setCmsToken] = useState<string>(() => getInMemoryAuthToken());
   const [cmsUser, setCmsUser] = useState<CmsUser | null>(null);
   const [cmsDbInfo, setCmsDbInfo] = useState<CmsDatabaseInfo | null>(null);
   const [cmsChecking, setCmsChecking] = useState<boolean>(() => {
@@ -244,6 +238,8 @@ export default function App() {
         magangGallery?: MagangGalleryItem[];
         magangPositions?: MagangPositionItem[];
         settings?: SiteSettings;
+        homeBlocks?: HomeBlockItem[];
+        tarifItems?: TarifItem[];
       };
       if (data.ok) {
         if (data.version) {
@@ -266,6 +262,12 @@ export default function App() {
         }
         if (data.settings) {
           setSiteSettings(data.settings);
+        }
+        if (Array.isArray(data.homeBlocks)) {
+          setHomeBlocks(data.homeBlocks);
+        }
+        if (Array.isArray(data.tarifItems)) {
+          setTarifItems(data.tarifItems);
         }
       }
     } catch {
@@ -354,12 +356,7 @@ export default function App() {
           }
           setCmsChecking(false);
         } else {
-          try {
-            window.localStorage.removeItem(CMS_TOKEN_KEY);
-            window.sessionStorage.removeItem(CMS_TOKEN_KEY);
-          } catch {
-            // ignore storage errors
-          }
+          clearInMemoryAuthToken();
           setCmsToken('');
           setCmsUser(null);
           setCmsChecking(false);
@@ -383,11 +380,8 @@ export default function App() {
   }, [pathname, cmsToken, navigatePath]);
 
   const handleCmsLoginSuccess = (user: CmsUser, token: string) => {
-    try {
-      window.localStorage.setItem(CMS_TOKEN_KEY, token);
-      window.sessionStorage.setItem(CMS_TOKEN_KEY, token);
-    } catch {
-      // ignore storage errors
+    if (token) {
+      setInMemoryAuthToken(token);
     }
     setCmsToken(token);
     setCmsUser(user);
@@ -396,16 +390,11 @@ export default function App() {
 
   const handleCmsLogout = async () => {
     try {
-      await fetch('/api/cms/logout', { method: 'POST', credentials: 'include' });
+      await authClient.signOut();
     } catch {
       // ignore logout error
     }
-    try {
-      window.localStorage.removeItem(CMS_TOKEN_KEY);
-      window.sessionStorage.removeItem(CMS_TOKEN_KEY);
-    } catch {
-      // ignore storage errors
-    }
+    clearInMemoryAuthToken();
     setCmsToken('');
     setCmsUser(null);
     navigatePath('/silahkanmasuk', true);
@@ -421,7 +410,11 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-    const nextPath = pageToPath[target] || '/';
+    const defaultTarifSlug = tarifItems[0]?.slug || 'penunjang-akademik';
+    const nextPath =
+      target === 'tarif-layanan'
+        ? `/tarif-layanan/${encodeURIComponent(defaultTarifSlug)}`
+        : pageToPath[target] || '/';
     window.history.pushState(null, '', nextPath);
     setPathname(nextPath);
     setRoute(
@@ -429,7 +422,7 @@ export default function App() {
         ? {
             page: 'tarif-layanan',
             articleId: null,
-            tarifCategory: 'penunjang-akademik',
+            tarifCategory: defaultTarifSlug,
           }
         : { page: target, articleId: null }
     );
@@ -525,7 +518,7 @@ export default function App() {
       active = false;
       window.cancelAnimationFrame(rafId);
     };
-  }, [pathname, effectivePage, newsArticles.length, siteSettings, bootstrapReady]);
+  }, [pathname, effectivePage, newsArticles.length, siteSettings, homeBlocks.length, bootstrapReady]);
 
   // Dynamic OpenGraph, Twitter Card, Canonical & Schema.org JSON-LD synchronization
   useEffect(() => {
@@ -642,17 +635,15 @@ export default function App() {
     }
 
     if (route.page === 'tarif-layanan') {
-      const activeCat = getTarifCategoryBySlug(route.tarifCategory);
-      const tarifDocTitle =
-        siteSettings[activeCat.settingKeys.title]?.trim() ||
-        activeCat.navLabel;
+      const activeCat = getTarifItemBySlug(tarifItems, route.tarifCategory);
+      const tarifDocTitle = activeCat?.title?.trim() || activeCat?.navLabel || 'Tarif Layanan';
       const tarifDesc =
-        siteSettings[activeCat.settingKeys.description]?.trim().slice(0, 160) ||
-        activeCat.defaultDescription.slice(0, 160);
+        activeCat?.description?.trim().slice(0, 160) ||
+        'Informasi resmi daftar tarif layanan Pusat Pengembangan Bisnis UIN Salatiga.';
       applyPageSeo({
         title: `${tarifDocTitle} — P2B UIN Salatiga`,
         description: tarifDesc,
-        path: `/tarif-layanan/${activeCat.slug}`,
+        path: activeCat ? `/tarif-layanan/${activeCat.slug}` : '/tarif-layanan',
         image: siteSettings.page_tarif_image,
       });
       return;
@@ -723,7 +714,7 @@ export default function App() {
         },
       },
     });
-  }, [pathname, effectivePage, route.page, route.tarifCategory, selectedArticle, siteSettings]);
+  }, [pathname, effectivePage, route.page, route.tarifCategory, selectedArticle, siteSettings, tarifItems]);
 
   // Dedicated Hidden Login Route: /silahkanmasuk
   if (pathname === '/silahkanmasuk') {
@@ -773,12 +764,33 @@ export default function App() {
     );
   }
 
+  const getBuilderBlocksForPage = (slug: BuilderPageSlug): HomeBlockItem[] => {
+    if (!bootstrapReady) {
+      return getDefaultBlocksWithIds(slug);
+    }
+    return homeBlocks.filter((b) => (b.pageSlug || 'home') === slug);
+  };
+
+  const isBuilderPage =
+    effectivePage === 'home' ||
+    effectivePage === 'about' ||
+    effectivePage === 'visi-misi' ||
+    effectivePage === 'struktur-organisasi';
+
+  const activeBuilderPageSlug: BuilderPageSlug =
+    effectivePage === 'about' ||
+    effectivePage === 'visi-misi' ||
+    effectivePage === 'struktur-organisasi'
+      ? effectivePage
+      : 'home';
+
   return (
     <MotionConfig reducedMotion="user">
       <Navbar
         currentPage={effectivePage}
         currentPath={pathname}
         settings={siteSettings}
+        tarifItems={tarifItems}
         onNavigatePage={navigateToPage}
         onNavigateTarget={handleNavigateTarget}
       />
@@ -814,24 +826,6 @@ export default function App() {
           onSelectArticle={navigateToArticle}
           onNavigateSection={navigateToSection}
         />
-      ) : effectivePage === 'about' ? (
-        <AboutPage
-          settings={siteSettings}
-          onOpenVisiMisi={() => navigateToPage('visi-misi')}
-          onNavigateSection={navigateToSection}
-        />
-      ) : effectivePage === 'visi-misi' ? (
-        <VisiMisiPage
-          settings={siteSettings}
-          onOpenStruktur={() => navigateToPage('struktur-organisasi')}
-          onNavigateSection={navigateToSection}
-        />
-      ) : effectivePage === 'struktur-organisasi' ? (
-        <StrukturOrganisasiPage
-          settings={siteSettings}
-          onOpenAbout={() => navigateToPage('about')}
-          onNavigateSection={navigateToSection}
-        />
       ) : effectivePage === 'kerjasama' ? (
         <KerjasamaPage
           settings={siteSettings}
@@ -840,6 +834,7 @@ export default function App() {
       ) : effectivePage === 'tarif-layanan' ? (
         <TarifLayananPage
           settings={siteSettings}
+          tarifItems={tarifItems}
           activeCategorySlug={route.tarifCategory}
           onSelectCategory={(slug) => navigatePath(`/tarif-layanan/${slug}`)}
           onNavigateSection={navigateToSection}
@@ -859,50 +854,22 @@ export default function App() {
           onBackToMagang={() => navigateToPage('magang')}
           onNavigateSection={navigateToSection}
         />
-      ) : (
-        <main className="min-h-screen bg-[#F6F3EC]">
-          <Hero
-            title={siteSettings.hero_title}
-            subtitle={siteSettings.hero_subtitle}
-            imageUrl={siteSettings.hero_image_url}
-            onOpenAbout={() => navigateToPage('about')}
-          />
-          <LogoMarqueeSection logos={partnerLogos} />
-          <WhoWeAre
-            settings={siteSettings}
-            onNavigateTarget={handleNavigateTarget}
-          />
-          <NewsSection
-            articles={newsArticles}
-            categories={newsCategories.map((c) => c.name)}
-            onViewAllNews={() => navigateToPage('all-news')}
-            onSelectArticle={navigateToArticle}
-          />
-          <LocationSection
-            addressText={siteSettings.location_address}
-            settings={siteSettings}
-          />
-          <div className="w-full flex justify-center px-3 md:px-5 pb-2 md:pb-4 bg-[#F6F3EC]">
-            <div className="w-full max-w-[1536px]">
-              <VisiCard settings={siteSettings} />
-            </div>
-          </div>
-          <Footer
-            settings={siteSettings}
-            onNavigate={(target) => {
-              if (target === 'who-we-are') {
-                navigateToPage('about');
-                return;
-              }
-              if (target === 'top') {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-                return;
-              }
-              document.getElementById(target)?.scrollIntoView({ behavior: 'smooth' });
-            }}
-          />
-        </main>
-      )}
+      ) : isBuilderPage ? (
+        <HomePageRenderer
+          pageSlug={activeBuilderPageSlug}
+          blocks={getBuilderBlocksForPage(activeBuilderPageSlug)}
+          settings={siteSettings}
+          newsArticles={newsArticles}
+          newsCategories={newsCategories.map((c) => c.name)}
+          partnerLogos={partnerLogos}
+          magangGallery={magangGallery}
+          magangPositions={magangPositions}
+          onOpenAbout={() => navigateToPage('about')}
+          onNavigateTarget={handleNavigateTarget}
+          onViewAllNews={() => navigateToPage('all-news')}
+          onSelectArticle={navigateToArticle}
+        />
+      ) : null}
     </MotionConfig>
   );
 }

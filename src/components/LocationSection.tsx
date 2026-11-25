@@ -4,6 +4,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { motion } from 'motion/react';
 import { SiteSettings } from '../types/cms';
+import {
+  HomeLocationBlockConfig,
+  sanitizeBuilderHref,
+} from '../data/homeBuilderDefaults';
 import { ScrollWordTitle } from './ScrollWordTitle';
 
 const DEFAULT_COORDS: [number, number] = [-7.311415209978375, 110.47916197054059];
@@ -12,15 +16,21 @@ const DEFAULT_ZOOM = 16;
 interface LocationSectionProps {
   addressText?: string;
   settings?: SiteSettings;
+  blockConfig?: Partial<HomeLocationBlockConfig>;
+  sectionId?: string;
 }
 
-export function LocationSection({ settings }: LocationSectionProps) {
+export function LocationSection({
+  settings,
+  blockConfig,
+  sectionId = 'lokasi-p2b',
+}: LocationSectionProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
 
-  const parsedLat = Number(settings?.location_lat);
-  const parsedLng = Number(settings?.location_lng);
+  const parsedLat = Number(blockConfig?.lat?.trim() || settings?.location_lat);
+  const parsedLng = Number(blockConfig?.lng?.trim() || settings?.location_lng);
   const coords: [number, number] =
     Number.isFinite(parsedLat) &&
     Number.isFinite(parsedLng) &&
@@ -30,7 +40,8 @@ export function LocationSection({ settings }: LocationSectionProps) {
       : DEFAULT_COORDS;
 
   const resolvedMapsUrl =
-    settings?.location_maps_url?.trim() ||
+    sanitizeBuilderHref(blockConfig?.mapsUrl) ||
+    sanitizeBuilderHref(settings?.location_maps_url) ||
     `https://www.google.com/maps/search/?api=1&query=${coords[0]},${coords[1]}`;
   const resolvedPhone = settings?.contact_phone?.trim() || '0811-2520-4371';
   const resolvedPhoneHref = `tel:${resolvedPhone.replace(/[^0-9+]/g, '').replace(/^0/, '+62')}`;
@@ -44,6 +55,7 @@ export function LocationSection({ settings }: LocationSectionProps) {
   const resolvedWhatsappHref = `https://wa.me/${resolvedWhatsappIntl}`;
   const resolvedEmail = settings?.contact_email?.trim() || 'p2b@uinsalatiga.ac.id';
   const resolvedAddress =
+    blockConfig?.address?.trim() ||
     settings?.location_address?.trim() ||
     'P2B UIN Salatiga, Gedung Auditorium & Student Center Prof. Dr. H. Achmadi, Jl. Lingkar Selatan Km. 02, Pulutan, Sidorejo, Kota Salatiga, Jawa Tengah 50716.';
 
@@ -148,7 +160,7 @@ export function LocationSection({ settings }: LocationSectionProps) {
 
   return (
     <section
-      id="lokasi-p2b"
+      id={sectionId}
       className="w-full flex justify-center px-3 md:px-5 pb-12 md:pb-20 bg-[#F6F3EC]"
     >
       <div className="w-full max-w-[1536px] flex flex-col gap-8 md:gap-10">
@@ -156,17 +168,24 @@ export function LocationSection({ settings }: LocationSectionProps) {
         <div className="px-3 md:px-6 flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-12">
           <div className="flex flex-col gap-2">
             <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
-              {settings?.location_eyebrow?.trim() || 'Lokasi Resmi'}
+              {blockConfig?.eyebrow?.trim() ||
+                settings?.location_eyebrow?.trim() ||
+                'Lokasi Resmi'}
             </span>
             <ScrollWordTitle
               as="h2"
-              text={settings?.location_heading?.trim() || 'Peta & Lokasi P2B'}
+              text={
+                blockConfig?.heading?.trim() ||
+                settings?.location_heading?.trim() ||
+                'Peta & Lokasi P2B'
+              }
               className="text-3xl sm:text-4xl md:text-5xl lg:text-[56px] font-normal text-[#164234] tracking-tight leading-[1.06]"
             />
           </div>
 
           <p className="text-sm sm:text-base md:text-lg text-[#3E544B] leading-relaxed max-w-xl font-normal">
-            {settings?.location_description?.trim() ||
+            {blockConfig?.description?.trim() ||
+              settings?.location_description?.trim() ||
               'Kunjungi kantor P2B UIN Salatiga di Gedung Auditorium & Student Center Prof. Dr. H. Achmadi untuk konsultasi sewa aset, kemitraan usaha, dan layanan komersial.'}
           </p>
         </div>
@@ -223,11 +242,14 @@ export function LocationSection({ settings }: LocationSectionProps) {
           {/* Desktop Frosted Glass Address & Contact Card (Top-Left) */}
           <div className="hidden sm:flex absolute top-5 left-5 md:top-7 md:left-7 z-[500] max-w-sm rounded-3xl bg-[#FAF8F3]/55 backdrop-blur-xl backdrop-saturate-150 border border-white/70 ring-1 ring-[#C9A45A]/25 p-5 flex-col gap-2.5 shadow-[0_12px_32px_rgba(11,38,29,0.12)]">
             <span className="text-[11px] text-[#8F6D26] uppercase tracking-wider">
-              {settings?.location_card_label?.trim() || 'Alamat Kantor P2B'}
+              {blockConfig?.cardLabel?.trim() ||
+                settings?.location_card_label?.trim() ||
+                'Alamat Kantor P2B'}
             </span>
             <ScrollWordTitle
               as="h3"
               text={
+                blockConfig?.cardTitle?.trim() ||
                 settings?.location_card_title?.trim() ||
                 'Gedung Auditorium & Student Center Prof. Dr. H. Achmadi'
               }
@@ -290,11 +312,15 @@ export function LocationSection({ settings }: LocationSectionProps) {
           >
             <div className="flex flex-col">
               <span className="text-[15px] md:text-[18px] font-normal text-[#164234] whitespace-nowrap">
-                {settings?.location_corner_label?.trim() || 'Petunjuk Arah'}
+                {blockConfig?.cornerLabel?.trim() ||
+                  settings?.location_corner_label?.trim() ||
+                  'Petunjuk Arah'}
               </span>
               <div className="flex items-center gap-1 text-[#8F6D26] group-hover:text-[#164234] transition-colors">
                 <span className="text-[12px] md:text-[14px] font-normal whitespace-nowrap">
-                  {settings?.location_corner_action_label?.trim() || 'Buka Maps'}
+                  {blockConfig?.cornerActionLabel?.trim() ||
+                    settings?.location_corner_action_label?.trim() ||
+                    'Buka Maps'}
                 </span>
                 <Icon icon="mdi:chevron-right" className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </div>

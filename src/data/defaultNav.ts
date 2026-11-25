@@ -159,19 +159,6 @@ export const defaultNavItems: CmsNavItem[] = [
     isActive: true,
   },
   {
-    id: 14,
-    parentId: 12,
-    label: 'Gedung Auditorium',
-    subtitle: 'Sewa ruang acara dan konferensi',
-    actionType: 'modal_service',
-    target: '/',
-    description:
-      'Gedung Auditorium Student Centre UIN Salatiga siap mendukung penyelenggaraan seminar nasional, wisuda, dan konferensi dengan sistem akustik modern.',
-    openNewTab: false,
-    sortOrder: 2,
-    isActive: true,
-  },
-  {
     id: 15,
     parentId: 12,
     label: 'Pelayanan Sewa Aset',
@@ -181,7 +168,7 @@ export const defaultNavItems: CmsNavItem[] = [
     description:
       'Optimalisasi penyewaan ruang rapat, studio, dan fasilitas pendukung universitas dengan prosedur transparan sesuai tata kelola PTN BLU.',
     openNewTab: false,
-    sortOrder: 3,
+    sortOrder: 2,
     isActive: true,
   },
   {
@@ -194,7 +181,7 @@ export const defaultNavItems: CmsNavItem[] = [
     description:
       'Klinik UIN SAGA melayani konsultasi kesehatan, pemeriksaan preventif, serta layanan kesehatan umum bagi mahasiswa, pegawai, dan masyarakat.',
     openNewTab: false,
-    sortOrder: 4,
+    sortOrder: 3,
     isActive: true,
   },
   {
@@ -207,7 +194,7 @@ export const defaultNavItems: CmsNavItem[] = [
     description:
       'Area Kantin kampus P2B menghadirkan beragam kuliner higienis, bersertifikat halal, dan mendukung transaksi nontunai QRIS.',
     openNewTab: false,
-    sortOrder: 5,
+    sortOrder: 4,
     isActive: true,
   },
   {
@@ -220,7 +207,7 @@ export const defaultNavItems: CmsNavItem[] = [
     description:
       'Layanan Tiket terpadu P2B memudahkan pemesanan akses acara kampus, seminar, serta layanan operasional universitas secara tertib.',
     openNewTab: false,
-    sortOrder: 6,
+    sortOrder: 5,
     isActive: true,
   },
 ];

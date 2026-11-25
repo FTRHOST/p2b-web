@@ -2,6 +2,11 @@ import { useState } from 'react';
 import { Icon } from '@iconify/react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SiteSettings } from '../types/cms';
+import {
+  HomeWhoWeAreBlockConfig,
+  sanitizeBuilderHref,
+  sanitizeBuilderMediaUrl,
+} from '../data/homeBuilderDefaults';
 import { ScrollWordTitle } from './ScrollWordTitle';
 
 interface FocusCardData {
@@ -17,6 +22,8 @@ interface FocusCardData {
 
 interface WhoWeAreProps {
   settings?: SiteSettings;
+  blockConfig?: Partial<HomeWhoWeAreBlockConfig>;
+  sectionId?: string;
   onNavigateTarget?: (target: string) => void;
 }
 
@@ -27,11 +34,16 @@ const DEFAULT_P1 =
 const DEFAULT_P2 =
   'Sebagai bagian dari ekosistem entrepreneurial university, P2B hadir melalui pengelolaan aset, pengembangan layanan, pembangunan kemitraan, dan penciptaan inovasi bisnis secara transparan, akuntabel, profesional, serta berkelanjutan untuk mendukung kemandirian universitas dan memperluas manfaat bagi sivitas akademika maupun masyarakat.';
 
-export function WhoWeAre({ settings, onNavigateTarget }: WhoWeAreProps) {
+export function WhoWeAre({
+  settings,
+  blockConfig,
+  sectionId = 'who-we-are',
+  onNavigateTarget,
+}: WhoWeAreProps) {
   const [selectedCard, setSelectedCard] = useState<FocusCardData | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
-  const focusCards: FocusCardData[] = [
+  const defaultFocusCards: FocusCardData[] = [
     {
       id: 'aset-layanan',
       title: settings?.focus_card_1_title?.trim() || 'Optimalisasi Aset & Layanan',
@@ -76,12 +88,41 @@ export function WhoWeAre({ settings, onNavigateTarget }: WhoWeAreProps) {
     },
   ];
 
+  const focusCards: FocusCardData[] =
+    Array.isArray(blockConfig?.cards) && blockConfig.cards.length > 0
+      ? blockConfig.cards.map((card, idx) => ({
+          id: card.id || `focus-${idx + 1}`,
+          title: card.title?.trim() || `Kartu Fokus ${idx + 1}`,
+          subtitle: card.subtitle?.trim() || '',
+          linkLabel: card.linkLabel?.trim() || 'Selengkapnya',
+          href: sanitizeBuilderHref(card.href) || '#layanan-aset',
+          image: sanitizeBuilderMediaUrl(card.image),
+          description: card.description?.trim() || '',
+          highlights: Array.isArray(card.highlights)
+            ? card.highlights.map((h) => String(h).trim()).filter(Boolean)
+            : [],
+        }))
+      : defaultFocusCards;
+
   const isDirectRoute = (href: string) =>
     href.startsWith('/') || /^https?:\/\//i.test(href);
 
+  const resolvedEyebrow =
+    blockConfig?.eyebrow?.trim() ||
+    settings?.about_eyebrow?.trim() ||
+    DEFAULT_EYEBROW;
+  const resolvedHeading =
+    blockConfig?.heading?.trim() ||
+    settings?.about_heading?.trim() ||
+    DEFAULT_HEADING;
+  const resolvedP1 =
+    blockConfig?.paragraph1?.trim() || settings?.about_p1?.trim() || DEFAULT_P1;
+  const resolvedP2 =
+    blockConfig?.paragraph2?.trim() || settings?.about_p2?.trim() || DEFAULT_P2;
+
   return (
     <section
-      id="who-we-are"
+      id={sectionId}
       className="w-full flex justify-center px-3 md:px-5 pt-8 md:pt-14 pb-12 md:pb-20 bg-[#F6F3EC]"
     >
       <div className="w-full max-w-[1536px] flex flex-col gap-10 md:gap-14">
@@ -89,11 +130,11 @@ export function WhoWeAre({ settings, onNavigateTarget }: WhoWeAreProps) {
         <div className="px-3 md:px-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-start">
           <div className="lg:col-span-5 flex flex-col gap-2">
             <span className="text-xs md:text-sm font-normal text-[#8F6D26] uppercase tracking-wider">
-              {settings?.about_eyebrow?.trim() || DEFAULT_EYEBROW}
+              {resolvedEyebrow}
             </span>
             <ScrollWordTitle
               as="h2"
-              text={settings?.about_heading?.trim() || DEFAULT_HEADING}
+              text={resolvedHeading}
               className="text-3xl sm:text-4xl md:text-5xl lg:text-[52px] font-normal text-[#164234] tracking-tight leading-[1.08]"
             />
           </div>
@@ -105,12 +146,12 @@ export function WhoWeAre({ settings, onNavigateTarget }: WhoWeAreProps) {
             transition={{ duration: 0.7, ease: 'easeOut' }}
             className="lg:col-span-7 flex flex-col gap-4 text-sm sm:text-base text-[#3E544B] leading-relaxed font-normal"
           >
-            <p>{settings?.about_p1?.trim() || DEFAULT_P1}</p>
-            <p>{settings?.about_p2?.trim() || DEFAULT_P2}</p>
+            {resolvedP1 && <p>{resolvedP1}</p>}
+            {resolvedP2 && <p>{resolvedP2}</p>}
           </motion.div>
         </div>
 
-        {/* 2 Featured Product/Service Cards matching Hero architecture */}
+        {/* Featured Product/Service Cards matching Hero architecture */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {focusCards.map((card, index) => {
             const external = /^https?:\/\//i.test(card.href);

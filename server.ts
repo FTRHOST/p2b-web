@@ -5,32 +5,39 @@ import http from 'http';
 import path from 'path';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import mysql from 'mysql2/promise';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
-import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import { WebSocketServer, WebSocket } from 'ws';
+import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
+import { DB_NAME, pool } from './src/db/pool.ts';
+import {
+  auth,
+  createFirstRunSuperAdmin,
+  runBetterAuthMigrationsAndSeed,
+} from './src/auth.ts';
+import {
+  getCmsRoleMeta,
+  getPermissionsForRole,
+  hasAnyCmsPermission,
+  normalizeCmsRole,
+  type CmsPermission,
+  type CmsRoleKey,
+} from './src/lib/authRoles.ts';
+import {
+  BUILDER_PAGE_SLUGS,
+  BUILDER_PAGE_SLUG_SET,
+  HOME_BLOCK_TYPE_SET,
+  buildDefaultBlocksForPage,
+  type BuilderPageSlug,
+} from './src/data/homeBuilderDefaults.ts';
+import {
+  DEFAULT_TARIF_ITEMS,
+  isSafePdfReference,
+  isValidTarifSlug,
+  slugifyTarifLabel,
+} from './src/data/tarifDefaults.ts';
 
 const PORT = Number(process.env.PORT || 3000);
-const DB_NAME = process.env.DB_NAME || 'p2b';
-const SESSION_COOKIE_NAME = 'p2b_cms_session';
-const SESSION_TTL_MS = 1000 * 60 * 60 * 12; // 12 hours
-
-const SESSION_SECRET =
-  process.env.CMS_SESSION_SECRET ||
-  crypto.createHash('sha256').update(`${process.env.DB_HOST || 'local'}:${DB_NAME}`).digest('hex');
-
-const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT || 3306),
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 6,
-  queueLimit: 0,
-  connectTimeout: 10000,
-});
 
 const NEWS_PLACEHOLDER_LOGO =
   'https://pusatbisnis.uinsalatiga.ac.id/wp-content/uploads/2026/11/2022-Web-UIN-Logo-1.png';
@@ -273,93 +280,105 @@ const SEED_MAGANG_POSITIONS = [
 ];
 
 interface SessionPayload {
-  userId: number;
+  userId: string;
   username: string;
   displayName: string;
-  role: string;
-  exp: number;
+  email: string;
+  role: CmsRoleKey;
+  roleLabel: string;
 }
 
 interface AuthenticatedRequest extends Request {
   cmsUser?: SessionPayload;
 }
 
-function signSessionToken(payload: Omit<SessionPayload, 'exp'>): string {
-  const fullPayload: SessionPayload = {
-    ...payload,
-    exp: Date.now() + SESSION_TTL_MS,
-  };
-  const encoded = Buffer.from(JSON.stringify(fullPayload)).toString('base64url');
-  const sig = crypto
-    .createHmac('sha256', SESSION_SECRET)
-    .update(encoded)
-    .digest('base64url');
-  return `${encoded}.${sig}`;
-}
-
-function verifySessionToken(token: string): SessionPayload | null {
-  const parts = token.split('.');
-  if (parts.length !== 2) return null;
-  const [encoded, sig] = parts;
-  const expectedSig = crypto
-    .createHmac('sha256', SESSION_SECRET)
-    .update(encoded)
-    .digest('base64url');
-
-  const sigBuf = Buffer.from(sig);
-  const expectedBuf = Buffer.from(expectedSig);
-  if (sigBuf.length !== expectedBuf.length) return null;
-  if (!crypto.timingSafeEqual(sigBuf, expectedBuf)) return null;
-
+async function resolveBetterAuthSession(req: Request): Promise<SessionPayload | null> {
   try {
-    const parsed = JSON.parse(
-      Buffer.from(encoded, 'base64url').toString('utf8')
-    ) as SessionPayload;
-    if (!parsed.exp || parsed.exp < Date.now()) return null;
-    return parsed;
+    const sessionData = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
+    });
+    if (!sessionData?.user) return null;
+    const rawUser = sessionData.user as typeof sessionData.user & {
+      username?: string | null;
+      role?: string | null;
+      banned?: boolean | null;
+      banExpires?: Date | string | null;
+    };
+    if (rawUser.banned) {
+      if (!rawUser.banExpires || new Date(rawUser.banExpires).getTime() > Date.now()) {
+        return null;
+      }
+    }
+    const role = normalizeCmsRole(rawUser.role);
+    const meta = getCmsRoleMeta(role);
+    return {
+      userId: String(rawUser.id),
+      username: String(rawUser.username || rawUser.email || '').trim(),
+      displayName: String(rawUser.name || rawUser.username || 'Pengguna CMS'),
+      email: String(rawUser.email || ''),
+      role,
+      roleLabel: meta.label,
+    };
   } catch {
     return null;
   }
 }
 
-function extractTokenFromRequest(req: Request): string | null {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.slice(7).trim();
-  }
-  const cookieHeader = req.headers.cookie;
-  if (cookieHeader) {
-    const pairs = cookieHeader.split(';');
-    for (const pair of pairs) {
-      const idx = pair.indexOf('=');
-      if (idx === -1) continue;
-      const key = pair.slice(0, idx).trim();
-      const val = pair.slice(idx + 1).trim();
-      if (key === SESSION_COOKIE_NAME) {
-        return decodeURIComponent(val);
-      }
-    }
-  }
-  return null;
-}
-
-function requireCmsAuth(
+async function requireCmsAuth(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
-): void {
-  const token = extractTokenFromRequest(req);
-  if (!token) {
-    res.status(401).json({ ok: false, message: 'Sesi login tidak ditemukan.' });
+): Promise<void> {
+  if (!dbReady) {
+    await ensureDatabaseReady();
+  }
+  if (!dbReady) {
+    res.status(503).json({
+      ok: false,
+      message: `Database tidak dapat diakses: ${dbInitError || 'Periksa koneksi database.'}`,
+    });
     return;
   }
-  const payload = verifySessionToken(token);
-  if (!payload) {
-    res.status(401).json({ ok: false, message: 'Sesi login tidak valid atau telah berakhir.' });
+  const user = await resolveBetterAuthSession(req);
+  if (!user) {
+    res.status(401).json({ ok: false, message: 'Sesi login tidak ditemukan atau telah berakhir.' });
     return;
   }
-  req.cmsUser = payload;
+  req.cmsUser = user;
   next();
+}
+
+function requireCmsPermission(...permissions: CmsPermission[]) {
+  return async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    if (!dbReady) {
+      await ensureDatabaseReady();
+    }
+    if (!dbReady) {
+      res.status(503).json({
+        ok: false,
+        message: `Database tidak dapat diakses: ${dbInitError || 'Periksa koneksi database.'}`,
+      });
+      return;
+    }
+    const user = await resolveBetterAuthSession(req);
+    if (!user) {
+      res.status(401).json({ ok: false, message: 'Sesi login tidak ditemukan atau telah berakhir.' });
+      return;
+    }
+    if (!hasAnyCmsPermission(user.role, permissions)) {
+      res.status(403).json({
+        ok: false,
+        message: `Profil "${user.roleLabel}" tidak memiliki izin untuk mengakses fitur ini.`,
+      });
+      return;
+    }
+    req.cmsUser = user;
+    next();
+  };
 }
 
 let dbReady = false;
@@ -542,19 +561,64 @@ async function ensureDatabaseReady(): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    // Seed initial admin user if empty
-    const [userCountRows] = await pool.query<RowDataPacket[]>(
-      'SELECT COUNT(*) AS total FROM cms_users'
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cms_home_blocks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        page_slug VARCHAR(64) NOT NULL DEFAULT 'home',
+        block_type VARCHAR(64) NOT NULL,
+        block_label VARCHAR(160) NOT NULL,
+        config_json LONGTEXT NOT NULL,
+        sort_order INT NOT NULL DEFAULT 100,
+        is_visible TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    const [hbPageCol] = await pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS col_exists
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'cms_home_blocks'
+         AND COLUMN_NAME = 'page_slug'`
     );
-    if (Number(userCountRows[0]?.total || 0) === 0) {
-      const initialPassword =
-        process.env.CMS_ADMIN_PASSWORD || process.env.DB_PASSWORD || 'P2bSalatiga#2026';
-      const hash = await bcrypt.hash(initialPassword, 10);
+    if (Number(hbPageCol[0]?.col_exists || 0) === 0) {
       await pool.query(
-        'INSERT INTO cms_users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)',
-        ['admin', 'Administrator P2B', hash, 'Super Admin']
+        "ALTER TABLE cms_home_blocks ADD COLUMN page_slug VARCHAR(64) NOT NULL DEFAULT 'home' AFTER id"
       );
     }
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cms_builder_presets (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(160) NOT NULL,
+        description VARCHAR(400) NOT NULL DEFAULT '',
+        block_type VARCHAR(64) NOT NULL,
+        config_json LONGTEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cms_tarif_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        slug VARCHAR(120) NOT NULL UNIQUE,
+        nav_label VARCHAR(200) NOT NULL,
+        short_label VARCHAR(120) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        doc_number VARCHAR(255) NOT NULL DEFAULT '',
+        description TEXT NOT NULL,
+        pdf_url VARCHAR(1024) NOT NULL DEFAULT '',
+        local_fallback_pdf_url VARCHAR(1024) NOT NULL DEFAULT '',
+        sort_order INT NOT NULL DEFAULT 100,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // Run Better Auth schema migrations & migrate legacy cms_users cleanly
+    await runBetterAuthMigrationsAndSeed();
 
     // Seed news if empty
     const [newsCountRows] = await pool.query<RowDataPacket[]>(
@@ -652,6 +716,82 @@ async function ensureDatabaseReady(): Promise<void> {
             pos.image_url,
             JSON.stringify(pos.tasks),
             pos.sort_order,
+          ]
+        );
+      }
+    }
+
+    // Seed page builder blocks per page_slug (Beranda & Profil pages) if empty
+    const [settingSeedRows] = await pool.query<RowDataPacket[]>(
+      'SELECT setting_key, setting_value FROM cms_site_settings'
+    );
+    const existingSettings: Record<string, string> = {};
+    for (const r of settingSeedRows) {
+      existingSettings[String(r.setting_key)] = String(r.setting_value ?? '');
+    }
+
+    for (const pageSlug of BUILDER_PAGE_SLUGS) {
+      const [pageBlockCountRows] = await pool.query<RowDataPacket[]>(
+        'SELECT COUNT(*) AS total FROM cms_home_blocks WHERE page_slug = ?',
+        [pageSlug]
+      );
+      if (Number(pageBlockCountRows[0]?.total || 0) === 0) {
+        const initialBlocks = buildDefaultBlocksForPage(pageSlug, existingSettings);
+        for (const blk of initialBlocks) {
+          await pool.query(
+            `INSERT INTO cms_home_blocks (page_slug, block_type, block_label, config_json, sort_order, is_visible)
+             VALUES (?, ?, ?, ?, ?, 1)`,
+            [
+              pageSlug,
+              blk.blockType,
+              blk.label,
+              JSON.stringify(blk.config),
+              blk.sortOrder,
+            ]
+          );
+        }
+      }
+    }
+
+    // Seed dynamic Tarif Layanan items if empty, migrating any prior settings overrides
+    const [tarifCountRows] = await pool.query<RowDataPacket[]>(
+      'SELECT COUNT(*) AS total FROM cms_tarif_items'
+    );
+    if (Number(tarifCountRows[0]?.total || 0) === 0) {
+      const legacySettingPrefix: Record<string, string> = {
+        'penunjang-akademik': 'tarif_penunjang',
+        'klinik-mitra-insani': 'tarif_klinik',
+        jurnal: 'tarif_jurnal',
+      };
+      for (const seedItem of DEFAULT_TARIF_ITEMS) {
+        const prefix = legacySettingPrefix[seedItem.slug];
+        const title =
+          (prefix && existingSettings[`${prefix}_title`]?.trim()) || seedItem.title;
+        const docNumber =
+          (prefix && existingSettings[`${prefix}_doc_number`]?.trim()) ||
+          seedItem.docNumber;
+        const description =
+          (prefix && existingSettings[`${prefix}_description`]?.trim()) ||
+          seedItem.description;
+        const pdfUrl =
+          (prefix && existingSettings[`${prefix}_pdf_url`]?.trim()) ||
+          seedItem.pdfUrl;
+
+        await pool.query(
+          `INSERT INTO cms_tarif_items
+            (slug, nav_label, short_label, title, doc_number, description, pdf_url, local_fallback_pdf_url, sort_order, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            seedItem.slug,
+            seedItem.navLabel,
+            seedItem.shortLabel,
+            title,
+            docNumber,
+            description,
+            pdfUrl,
+            seedItem.localFallbackPdfUrl || '',
+            seedItem.sortOrder,
+            seedItem.isActive ? 1 : 0,
           ]
         );
       }
@@ -843,6 +983,91 @@ function isSafeHttpUrl(raw: string): boolean {
   }
 }
 
+function sanitizeHomeBlockConfigValue(val: unknown, depth = 0): unknown {
+  if (depth > 5) return '';
+  if (typeof val === 'string') return val.slice(0, 8000);
+  if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
+  if (typeof val === 'boolean') return val;
+  if (Array.isArray(val)) {
+    return val.slice(0, 24).map((entry) => sanitizeHomeBlockConfigValue(entry, depth + 1));
+  }
+  if (val && typeof val === 'object') {
+    const clean: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+      const cleanKey = String(k).trim().slice(0, 80);
+      if (!cleanKey) continue;
+      clean[cleanKey] = sanitizeHomeBlockConfigValue(v, depth + 1);
+    }
+    return clean;
+  }
+  return '';
+}
+
+function mapHomeBlockRow(row: RowDataPacket) {
+  let config: Record<string, unknown> = {};
+  if (row.config_json) {
+    try {
+      const parsed = JSON.parse(String(row.config_json));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        config = parsed as Record<string, unknown>;
+      }
+    } catch {
+      config = {};
+    }
+  }
+  const rawSlug = String(row.page_slug || 'home').trim();
+  const pageSlug: BuilderPageSlug = BUILDER_PAGE_SLUG_SET.has(rawSlug)
+    ? (rawSlug as BuilderPageSlug)
+    : 'home';
+  return {
+    id: Number(row.id),
+    pageSlug,
+    blockType: String(row.block_type),
+    label: String(row.block_label || ''),
+    config,
+    sortOrder: Number(row.sort_order),
+    isVisible: Boolean(row.is_visible),
+  };
+}
+
+function mapBuilderPresetRow(row: RowDataPacket) {
+  let config: Record<string, unknown> = {};
+  if (row.config_json) {
+    try {
+      const parsed = JSON.parse(String(row.config_json));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        config = parsed as Record<string, unknown>;
+      }
+    } catch {
+      config = {};
+    }
+  }
+  return {
+    id: Number(row.id),
+    name: String(row.name || ''),
+    description: String(row.description || ''),
+    blockType: String(row.block_type),
+    config,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : undefined,
+  };
+}
+
+function mapTarifItemRow(row: RowDataPacket) {
+  return {
+    id: Number(row.id),
+    slug: String(row.slug),
+    navLabel: String(row.nav_label || ''),
+    shortLabel: String(row.short_label || ''),
+    title: String(row.title || ''),
+    docNumber: String(row.doc_number || ''),
+    description: String(row.description || ''),
+    pdfUrl: String(row.pdf_url || ''),
+    localFallbackPdfUrl: String(row.local_fallback_pdf_url || ''),
+    sortOrder: Number(row.sort_order),
+    isActive: Boolean(row.is_active),
+  };
+}
+
 function slugifyTitle(input: string): string {
   const base = input
     .toLowerCase()
@@ -931,6 +1156,11 @@ async function getPublicDataVersion(): Promise<{
         (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_magang_positions) AS mp_ts,
         (SELECT COUNT(*) FROM cms_site_settings) AS settings_count,
         (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_site_settings) AS settings_ts,
+        (SELECT COUNT(*) FROM cms_home_blocks) AS hb_count,
+        (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_home_blocks) AS hb_ts,
+        (SELECT COUNT(*) FROM cms_builder_presets) AS bp_count,
+        (SELECT COUNT(*) FROM cms_tarif_items) AS tarif_count,
+        (SELECT COALESCE(MAX(updated_at), '1970-01-01') FROM cms_tarif_items) AS tarif_ts,
         (SELECT COUNT(*) FROM cms_media) AS media_count
     `);
     const r = rows[0] || {};
@@ -947,6 +1177,11 @@ async function getPublicDataVersion(): Promise<{
       r.mp_ts,
       r.settings_count,
       r.settings_ts,
+      r.hb_count,
+      r.hb_ts,
+      r.bp_count,
+      r.tarif_count,
+      r.tarif_ts,
       r.media_count,
     ].join('|');
     const hash = crypto.createHash('sha1').update(signature).digest('hex').slice(0, 12);
@@ -972,6 +1207,9 @@ async function notifyCmsDataCommitted(
     | 'magang_gallery'
     | 'magang_positions'
     | 'magang_applications'
+    | 'home_blocks'
+    | 'builder_presets'
+    | 'tarif_items'
     | 'media'
     | 'settings',
   action: string,
@@ -1053,6 +1291,16 @@ async function startServer() {
   });
 
   app.set('trust proxy', 1);
+
+  // Mount Better Auth handler BEFORE express.json() so request streams stay intact
+  app.use('/api/auth', async (_req: Request, _res: Response, next: NextFunction) => {
+    if (!dbReady) {
+      await ensureDatabaseReady();
+    }
+    next();
+  });
+  app.all('/api/auth/*', toNodeHandler(auth));
+
   app.use(express.json({ limit: '50mb' }));
 
   const ALLOWED_UPLOAD_MIMES = new Set([
@@ -1109,8 +1357,8 @@ async function startServer() {
   app.get('/api/media/:id', serveMediaHandler);
   app.get('/api/media/:id/:filename', serveMediaHandler);
 
-  // Authenticated CMS upload endpoint for photos and PDF documents
-  app.post('/api/cms/upload', requireCmsAuth, (req: AuthenticatedRequest, res: Response) => {
+  // Authenticated CMS upload endpoint for photos and PDF documents (allowed for Media Managers and News Editors)
+  app.post('/api/cms/upload', requireCmsPermission('news', 'media_write'), (req: AuthenticatedRequest, res: Response) => {
     upload.single('file')(req, res, async (uploadErr: unknown) => {
       if (uploadErr) {
         const errMsg =
@@ -1182,7 +1430,7 @@ async function startServer() {
   });
 
   // CMS Media Library Management: List, Export, Import, Update (metadata or file replacement), Delete
-  app.get('/api/cms/media', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/media', requireCmsPermission('news', 'media_read', 'media_write'), async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const [rows] = await pool.query<RowDataPacket[]>(
         'SELECT id, original_name, alt_text, mime_type, size_bytes, created_at FROM cms_media ORDER BY created_at DESC'
@@ -1211,7 +1459,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/cms/media/export', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/media/export', requireCmsPermission('media_write'), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const idsParam = typeof req.query.ids === 'string' ? req.query.ids.trim() : '';
       const idList = idsParam
@@ -1268,7 +1516,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/cms/media/import', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/cms/media/import', requireCmsPermission('media_write'), async (req: AuthenticatedRequest, res: Response) => {
     const { items, mode } = req.body as {
       mode?: 'upsert' | 'skip_existing';
       items?: {
@@ -1355,7 +1603,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/cms/media/:id', requireCmsAuth, (req: AuthenticatedRequest, res: Response) => {
+  app.put('/api/cms/media/:id', requireCmsPermission('media_write'), (req: AuthenticatedRequest, res: Response) => {
     const mediaId = String(req.params.id || '').trim();
     if (!mediaId) {
       res.status(400).json({ ok: false, message: 'ID media tidak valid.' });
@@ -1463,7 +1711,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/cms/media/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete('/api/cms/media/:id', requireCmsPermission('media_write'), async (req: AuthenticatedRequest, res: Response) => {
     const mediaId = String(req.params.id || '').trim();
     if (!mediaId) {
       res.status(400).json({ ok: false, message: 'ID media tidak valid.' });
@@ -1525,6 +1773,12 @@ async function startServer() {
       const [magangPositionRows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_magang_positions WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
       );
+      const [homeBlockRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_home_blocks WHERE is_visible = 1 ORDER BY page_slug ASC, sort_order ASC, id ASC'
+      );
+      const [tarifRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_tarif_items WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
+      );
       const [settings, versionInfo] = await Promise.all([
         fetchSiteSettingsMap(),
         getPublicDataVersion(),
@@ -1539,6 +1793,8 @@ async function startServer() {
         partnerLogos: logoRows.map(mapPartnerLogoRow),
         magangGallery: magangGalleryRows.map(mapMagangGalleryRow),
         magangPositions: magangPositionRows.map(mapMagangPositionRow),
+        homeBlocks: homeBlockRows.map(mapHomeBlockRow),
+        tarifItems: tarifRows.map(mapTarifItemRow),
         categories: categoryRows.map((c) => ({
           id: Number(c.id),
           name: String(c.name),
@@ -1842,7 +2098,7 @@ async function startServer() {
 
   app.post(
     '/api/cms/kerjasama/preview',
-    requireCmsAuth,
+    requireCmsPermission('kerjasama', 'settings'),
     async (req: AuthenticatedRequest, res: Response) => {
       const body = req.body as { csvUrl?: string };
       let csvUrl = String(body?.csvUrl || '').trim();
@@ -2130,100 +2386,115 @@ async function startServer() {
     });
   });
 
-  // CMS Authentication
-  app.post('/api/cms/login', async (req: Request, res: Response) => {
+  // Better Auth First-Run Super Admin Setup (locked once any user exists)
+  app.get('/api/auth-setup/status', async (_req: Request, res: Response) => {
     if (!dbReady) {
       await ensureDatabaseReady();
     }
     if (!dbReady) {
       res.status(503).json({
         ok: false,
-        message: `Database tidak dapat diakses: ${dbInitError || 'Periksa koneksi tunnel MariaDB.'}`,
+        needsSetup: false,
+        message: `Database tidak dapat diakses: ${dbInitError || 'Periksa koneksi database.'}`,
       });
       return;
     }
-
-    const { username, password } = req.body as {
-      username?: string;
-      password?: string;
-    };
-
-    if (!username?.trim() || !password) {
-      res.status(400).json({ ok: false, message: 'Username dan password wajib diisi.' });
-      return;
-    }
-
     try {
-      const [rows] = await pool.query<RowDataPacket[]>(
-        'SELECT id, username, display_name, password_hash, role FROM cms_users WHERE username = ? LIMIT 1',
-        [username.trim()]
-      );
-
-      if (rows.length === 0) {
-        res.status(401).json({ ok: false, message: 'Username atau password salah.' });
-        return;
-      }
-
-      const user = rows[0];
-      const match = await bcrypt.compare(password, String(user.password_hash));
-      if (!match) {
-        res.status(401).json({ ok: false, message: 'Username atau password salah.' });
-        return;
-      }
-
-      const token = signSessionToken({
-        userId: Number(user.id),
-        username: String(user.username),
-        displayName: String(user.display_name),
-        role: String(user.role),
-      });
-
-      const isHttps =
-        req.secure || req.headers['x-forwarded-proto'] === 'https';
-
-      res.cookie(SESSION_COOKIE_NAME, token, {
-        httpOnly: true,
-        sameSite: isHttps ? 'none' : 'lax',
-        secure: isHttps,
-        maxAge: SESSION_TTL_MS,
-        path: '/',
-      });
-
-      res.json({
-        ok: true,
-        token,
-        user: {
-          id: Number(user.id),
-          username: String(user.username),
-          displayName: String(user.display_name),
-          role: String(user.role),
-        },
-      });
+      const [rows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM `user`');
+      const totalUsers = Number(rows[0]?.total || 0);
+      res.json({ ok: true, needsSetup: totalUsers === 0 });
     } catch (err) {
       res.status(500).json({
         ok: false,
-        message: err instanceof Error ? err.message : 'Gagal memproses login.',
+        needsSetup: false,
+        message: err instanceof Error ? err.message : 'Gagal memeriksa status akun.',
       });
     }
   });
 
-  app.post('/api/cms/logout', (req: Request, res: Response) => {
-    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
-    res.clearCookie(SESSION_COOKIE_NAME, {
-      httpOnly: true,
-      sameSite: isHttps ? 'none' : 'lax',
-      secure: isHttps,
-      path: '/',
-    });
+  app.post('/api/auth-setup/claim', async (req: Request, res: Response) => {
+    if (!dbReady) {
+      await ensureDatabaseReady();
+    }
+    if (!dbReady) {
+      res.status(503).json({
+        ok: false,
+        message: `Database tidak dapat diakses: ${dbInitError || 'Periksa koneksi database.'}`,
+      });
+      return;
+    }
+
+    const { username, displayName, email, password } = req.body as {
+      username?: string;
+      displayName?: string;
+      email?: string;
+      password?: string;
+    };
+
+    const cleanUsername = String(username || '').trim();
+    if (!cleanUsername || cleanUsername.length < 3 || !/^[a-zA-Z0-9._-]+$/.test(cleanUsername)) {
+      res.status(400).json({
+        ok: false,
+        message: 'Username minimal 3 karakter dan hanya boleh menggunakan huruf, angka, titik, atau garis bawah.',
+      });
+      return;
+    }
+    if (!password || password.length < 6) {
+      res.status(400).json({
+        ok: false,
+        message: 'Password minimal 6 karakter.',
+      });
+      return;
+    }
+
+    try {
+      const created = await createFirstRunSuperAdmin({
+        username: cleanUsername,
+        displayName: String(displayName || cleanUsername).trim(),
+        email,
+        password,
+      });
+      res.status(201).json({ ok: true, user: created });
+    } catch (err) {
+      if (err instanceof Error && err.message === 'ALREADY_INITIALIZED') {
+        res.status(409).json({
+          ok: false,
+          message: 'Akun Super Admin sudah terdaftar. Silakan masuk melalui formulir login.',
+        });
+        return;
+      }
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal membuat akun Super Admin.',
+      });
+    }
+  });
+
+  // CMS Session & Profile Introspection
+  app.post('/api/cms/logout', async (req: Request, res: Response) => {
+    try {
+      await auth.api.signOut({ headers: fromNodeHeaders(req.headers) });
+    } catch {
+      // ignore if already signed out
+    }
     res.json({ ok: true });
   });
 
   app.get('/api/cms/me', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const [verRows] = await pool.query<RowDataPacket[]>('SELECT VERSION() AS ver');
+      const user = req.cmsUser!;
       res.json({
         ok: true,
-        user: req.cmsUser,
+        user: {
+          id: user.userId,
+          username: user.username,
+          displayName: user.displayName,
+          email: user.email,
+          role: user.role,
+          roleLabel: user.roleLabel,
+          permissions: getPermissionsForRole(user.role),
+        },
         database: {
           connected: true,
           host: process.env.DB_HOST || '-',
@@ -2254,35 +2525,28 @@ async function startServer() {
     }
 
     try {
-      const [rows] = await pool.query<RowDataPacket[]>(
-        'SELECT password_hash FROM cms_users WHERE id = ? LIMIT 1',
-        [req.cmsUser?.userId]
-      );
-      if (rows.length === 0) {
-        res.status(404).json({ ok: false, message: 'Akun tidak ditemukan.' });
-        return;
-      }
-      const valid = await bcrypt.compare(currentPassword, String(rows[0].password_hash));
-      if (!valid) {
-        res.status(401).json({ ok: false, message: 'Password saat ini tidak sesuai.' });
-        return;
-      }
-      const nextHash = await bcrypt.hash(newPassword, 10);
-      await pool.query('UPDATE cms_users SET password_hash = ? WHERE id = ?', [
-        nextHash,
-        req.cmsUser?.userId,
-      ]);
+      await auth.api.changePassword({
+        body: {
+          currentPassword,
+          newPassword,
+          revokeOtherSessions: false,
+        },
+        headers: fromNodeHeaders(req.headers),
+      });
       res.json({ ok: true, message: 'Password berhasil diperbarui.' });
     } catch (err) {
-      res.status(500).json({
+      res.status(400).json({
         ok: false,
-        message: err instanceof Error ? err.message : 'Gagal memperbarui password.',
+        message:
+          err instanceof Error && err.message
+            ? err.message
+            : 'Password saat ini tidak sesuai atau gagal memperbarui password.',
       });
     }
   });
 
   // CMS Overview stats
-  app.get('/api/cms/overview', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/overview', requireCmsPermission('overview'), async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const [[newsCount]] = await pool.query<RowDataPacket[]>(
         'SELECT COUNT(*) AS total, SUM(CASE WHEN is_published = 1 THEN 1 ELSE 0 END) AS published FROM cms_news'
@@ -2304,7 +2568,7 @@ async function startServer() {
   });
 
   // CMS News CRUD
-  app.get('/api/cms/news', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/news', requireCmsPermission('news'), async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const [rows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_news ORDER BY sort_order ASC, id DESC'
@@ -2319,7 +2583,7 @@ async function startServer() {
   });
 
   // Export complete News bundle (article contents + all referenced cms_media binaries)
-  app.get('/api/cms/news/export', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/news/export', requireCmsPermission('news'), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const idParam = req.query.id ? Number(req.query.id) : null;
       const idsParam = typeof req.query.ids === 'string' ? req.query.ids.trim() : '';
@@ -2427,7 +2691,7 @@ async function startServer() {
   });
 
   // Import complete News bundle (restores referenced media first, then upserts/inserts articles)
-  app.post('/api/cms/news/import', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/cms/news/import', requireCmsPermission('news'), async (req: AuthenticatedRequest, res: Response) => {
     const { news, media, mode } = req.body as {
       mode?: 'upsert' | 'skip_existing';
       news?: {
@@ -2591,7 +2855,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/cms/news', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/cms/news', requireCmsPermission('news'), async (req: AuthenticatedRequest, res: Response) => {
     const {
       category,
       date,
@@ -2704,7 +2968,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/cms/news/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.put('/api/cms/news/:id', requireCmsPermission('news'), async (req: AuthenticatedRequest, res: Response) => {
     const dbId = Number(req.params.id);
     if (!Number.isFinite(dbId)) {
       res.status(400).json({ ok: false, message: 'ID berita tidak valid.' });
@@ -2818,7 +3082,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/cms/news/bulk-delete', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/cms/news/bulk-delete', requireCmsPermission('news'), async (req: AuthenticatedRequest, res: Response) => {
     const { ids } = req.body as { ids?: unknown[] };
     const cleanIds = Array.isArray(ids)
       ? Array.from(
@@ -2851,7 +3115,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/cms/news/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete('/api/cms/news/:id', requireCmsPermission('news'), async (req: AuthenticatedRequest, res: Response) => {
     const dbId = Number(req.params.id);
     if (!Number.isFinite(dbId)) {
       res.status(400).json({ ok: false, message: 'ID berita tidak valid.' });
@@ -2870,7 +3134,7 @@ async function startServer() {
   });
 
   // CMS Custom News Categories CRUD
-  app.get('/api/cms/categories', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/categories', requireCmsPermission('news'), async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT c.id, c.name, c.sort_order, COUNT(n.id) AS articleCount
@@ -2896,7 +3160,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/cms/categories', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/cms/categories', requireCmsPermission('news'), async (req: AuthenticatedRequest, res: Response) => {
     const { name } = req.body as { name?: string };
     const cleanName = (name || '').trim().slice(0, 60);
     if (!cleanName) {
@@ -2945,7 +3209,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/cms/categories/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.put('/api/cms/categories/:id', requireCmsPermission('news'), async (req: AuthenticatedRequest, res: Response) => {
     const catId = Number(req.params.id);
     if (!Number.isFinite(catId)) {
       res.status(400).json({ ok: false, message: 'ID kategori tidak valid.' });
@@ -3005,7 +3269,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/cms/categories/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete('/api/cms/categories/:id', requireCmsPermission('news'), async (req: AuthenticatedRequest, res: Response) => {
     const catId = Number(req.params.id);
     if (!Number.isFinite(catId)) {
       res.status(400).json({ ok: false, message: 'ID kategori tidak valid.' });
@@ -3054,7 +3318,7 @@ async function startServer() {
   });
 
   // CMS Partner Logos CRUD & Reordering
-  app.get('/api/cms/partner-logos', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/partner-logos', requireCmsPermission('logos'), async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const [rows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_partner_logos ORDER BY sort_order ASC, id ASC'
@@ -3068,7 +3332,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/cms/partner-logos', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/cms/partner-logos', requireCmsPermission('logos'), async (req: AuthenticatedRequest, res: Response) => {
     const { name, logoUrl, linkUrl, sortOrder, isActive } = req.body as {
       name?: string;
       logoUrl?: string;
@@ -3117,7 +3381,7 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/cms/partner-logos/reorder', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch('/api/cms/partner-logos/reorder', requireCmsPermission('logos'), async (req: AuthenticatedRequest, res: Response) => {
     const { orderedIds } = req.body as { orderedIds?: unknown[] };
     const cleanIds = Array.isArray(orderedIds)
       ? orderedIds.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
@@ -3152,7 +3416,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/cms/partner-logos/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.put('/api/cms/partner-logos/:id', requireCmsPermission('logos'), async (req: AuthenticatedRequest, res: Response) => {
     const logoId = Number(req.params.id);
     if (!Number.isFinite(logoId)) {
       res.status(400).json({ ok: false, message: 'ID logo tidak valid.' });
@@ -3208,7 +3472,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/cms/partner-logos/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete('/api/cms/partner-logos/:id', requireCmsPermission('logos'), async (req: AuthenticatedRequest, res: Response) => {
     const logoId = Number(req.params.id);
     if (!Number.isFinite(logoId)) {
       res.status(400).json({ ok: false, message: 'ID logo tidak valid.' });
@@ -3227,7 +3491,7 @@ async function startServer() {
   });
 
   // CMS Magang Gallery CRUD & Reordering
-  app.get('/api/cms/magang-gallery', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/magang-gallery', requireCmsPermission('magang'), async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const [rows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_magang_gallery ORDER BY sort_order ASC, id ASC'
@@ -3241,7 +3505,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/cms/magang-gallery', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/cms/magang-gallery', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const { title, caption, imageUrl, altText, sortOrder, isActive } = req.body as {
       title?: string;
       caption?: string;
@@ -3292,7 +3556,7 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/cms/magang-gallery/reorder', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch('/api/cms/magang-gallery/reorder', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const { orderedIds } = req.body as { orderedIds?: unknown[] };
     const cleanIds = Array.isArray(orderedIds)
       ? orderedIds.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
@@ -3327,7 +3591,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/cms/magang-gallery/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.put('/api/cms/magang-gallery/:id', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const itemId = Number(req.params.id);
     if (!Number.isFinite(itemId)) {
       res.status(400).json({ ok: false, message: 'ID foto galeri tidak valid.' });
@@ -3385,7 +3649,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/cms/magang-gallery/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete('/api/cms/magang-gallery/:id', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const itemId = Number(req.params.id);
     if (!Number.isFinite(itemId)) {
       res.status(400).json({ ok: false, message: 'ID foto galeri tidak valid.' });
@@ -3404,7 +3668,7 @@ async function startServer() {
   });
 
   // CMS Magang Positions CRUD & Reordering
-  app.get('/api/cms/magang-positions', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/magang-positions', requireCmsPermission('magang'), async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const [rows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_magang_positions ORDER BY sort_order ASC, id ASC'
@@ -3418,7 +3682,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/cms/magang-positions', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/cms/magang-positions', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const { title, division, description, imageUrl, tasks, sortOrder, isActive, isAvailable } = req.body as {
       title?: string;
       division?: string;
@@ -3477,7 +3741,7 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/cms/magang-positions/reorder', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch('/api/cms/magang-positions/reorder', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const { orderedIds } = req.body as { orderedIds?: unknown[] };
     const cleanIds = Array.isArray(orderedIds)
       ? orderedIds.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
@@ -3512,7 +3776,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/cms/magang-positions/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.put('/api/cms/magang-positions/:id', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const posId = Number(req.params.id);
     if (!Number.isFinite(posId)) {
       res.status(400).json({ ok: false, message: 'ID posisi magang tidak valid.' });
@@ -3577,7 +3841,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/cms/magang-positions/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete('/api/cms/magang-positions/:id', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const posId = Number(req.params.id);
     if (!Number.isFinite(posId)) {
       res.status(400).json({ ok: false, message: 'ID posisi magang tidak valid.' });
@@ -3596,7 +3860,7 @@ async function startServer() {
   });
 
   // CMS Magang Applications Review & Secure File Download
-  app.get('/api/cms/magang-applications', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/magang-applications', requireCmsPermission('magang'), async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const [rows] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM cms_magang_applications ORDER BY created_at DESC, id DESC'
@@ -3610,7 +3874,7 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/cms/magang-applications/:id/status', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch('/api/cms/magang-applications/:id/status', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const appId = Number(req.params.id);
     const { status } = req.body as { status?: string };
     const allowedStatuses = new Set(['baru', 'ditinjau', 'diterima', 'ditolak']);
@@ -3638,7 +3902,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/cms/magang-applications/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete('/api/cms/magang-applications/:id', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const appId = Number(req.params.id);
     if (!Number.isFinite(appId)) {
       res.status(400).json({ ok: false, message: 'ID pendaftar tidak valid.' });
@@ -3671,7 +3935,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/cms/magang-files/:id', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/magang-files/:id', requireCmsPermission('magang'), async (req: AuthenticatedRequest, res: Response) => {
     const fileId = String(req.params.id || '').trim();
     if (!fileId || !/^[a-zA-Z0-9_-]{4,48}$/.test(fileId)) {
       res.status(400).json({ ok: false, message: 'ID berkas tidak valid.' });
@@ -3702,7 +3966,7 @@ async function startServer() {
   });
 
   // CMS Site Settings Read & Update
-  app.get('/api/cms/settings', requireCmsAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/cms/settings', requireCmsPermission('settings', 'kerjasama', 'tarif'), async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const settings = await fetchSiteSettingsMap();
       res.json({ ok: true, settings });
@@ -3714,7 +3978,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/cms/settings', requireCmsAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.put('/api/cms/settings', requireCmsPermission('settings', 'kerjasama', 'tarif'), async (req: AuthenticatedRequest, res: Response) => {
     const { settings } = req.body as { settings?: Record<string, unknown> };
     if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
       res.status(400).json({ ok: false, message: 'Format pengaturan situs tidak valid.' });
@@ -3745,6 +4009,724 @@ async function startServer() {
       res.status(500).json({
         ok: false,
         message: err instanceof Error ? err.message : 'Gagal menyimpan pengaturan situs.',
+      });
+    }
+  });
+
+  // CMS Multi-Page Page Builder CRUD, Duplicate, Reorder & Reset
+  app.get('/api/cms/home-blocks', requireCmsPermission('homebuilder'), async (req: AuthenticatedRequest, res: Response) => {
+    const rawPageSlug = typeof req.query.pageSlug === 'string' ? req.query.pageSlug.trim() : '';
+    try {
+      if (rawPageSlug) {
+        if (!BUILDER_PAGE_SLUG_SET.has(rawPageSlug)) {
+          res.status(400).json({ ok: false, message: 'Halaman builder tidak valid.' });
+          return;
+        }
+        const [rows] = await pool.query<RowDataPacket[]>(
+          'SELECT * FROM cms_home_blocks WHERE page_slug = ? ORDER BY sort_order ASC, id ASC',
+          [rawPageSlug]
+        );
+        res.json({ ok: true, items: rows.map(mapHomeBlockRow) });
+        return;
+      }
+
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_home_blocks ORDER BY page_slug ASC, sort_order ASC, id ASC'
+      );
+      res.json({ ok: true, items: rows.map(mapHomeBlockRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memuat elemen halaman.',
+      });
+    }
+  });
+
+  app.post('/api/cms/home-blocks', requireCmsPermission('homebuilder'), async (req: AuthenticatedRequest, res: Response) => {
+    const { pageSlug, blockType, label, config, isVisible } = req.body as {
+      pageSlug?: string;
+      blockType?: string;
+      label?: string;
+      config?: Record<string, unknown>;
+      isVisible?: boolean;
+    };
+
+    const cleanPageSlug = String(pageSlug || 'home').trim();
+    if (!BUILDER_PAGE_SLUG_SET.has(cleanPageSlug)) {
+      res.status(400).json({ ok: false, message: 'Target halaman builder tidak valid.' });
+      return;
+    }
+
+    const cleanType = String(blockType || '').trim();
+    if (!HOME_BLOCK_TYPE_SET.has(cleanType)) {
+      res.status(400).json({ ok: false, message: 'Tipe elemen builder tidak valid.' });
+      return;
+    }
+
+    const cleanLabel = String(label || cleanType).trim().slice(0, 160) || cleanType;
+    const cleanConfig =
+      config && typeof config === 'object' && !Array.isArray(config)
+        ? (sanitizeHomeBlockConfigValue(config) as Record<string, unknown>)
+        : {};
+
+    try {
+      const [maxRows] = await pool.query<RowDataPacket[]>(
+        'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM cms_home_blocks WHERE page_slug = ?',
+        [cleanPageSlug]
+      );
+      const nextOrder = Number(maxRows[0]?.max_order || 0) + 1;
+
+      const [result] = await pool.query<ResultSetHeader>(
+        `INSERT INTO cms_home_blocks (page_slug, block_type, block_label, config_json, sort_order, is_visible)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          cleanPageSlug,
+          cleanType,
+          cleanLabel,
+          JSON.stringify(cleanConfig),
+          nextOrder,
+          isVisible === false ? 0 : 1,
+        ]
+      );
+
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_home_blocks WHERE id = ? LIMIT 1',
+        [result.insertId]
+      );
+      await notifyCmsDataCommitted('home_blocks', 'created', result.insertId);
+      res.status(201).json({ ok: true, item: mapHomeBlockRow(rows[0]) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menambah elemen halaman.',
+      });
+    }
+  });
+
+  app.put('/api/cms/home-blocks/reorder', requireCmsPermission('homebuilder'), async (req: AuthenticatedRequest, res: Response) => {
+    const { orderedIds } = req.body as { orderedIds?: unknown[] };
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      res.status(400).json({ ok: false, message: 'Daftar urutan elemen tidak valid.' });
+      return;
+    }
+
+    const cleanIds = orderedIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    if (cleanIds.length === 0) {
+      res.status(400).json({ ok: false, message: 'ID elemen urutan tidak valid.' });
+      return;
+    }
+
+    try {
+      const caseParts = cleanIds.map(() => 'WHEN ? THEN ?').join(' ');
+      const inPlaceholders = cleanIds.map(() => '?').join(', ');
+      const caseParams: number[] = [];
+      cleanIds.forEach((id, idx) => {
+        caseParams.push(id, idx + 1);
+      });
+      await pool.query(
+        `UPDATE cms_home_blocks SET sort_order = CASE id ${caseParts} ELSE sort_order END WHERE id IN (${inPlaceholders})`,
+        [...caseParams, ...cleanIds]
+      );
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_home_blocks ORDER BY page_slug ASC, sort_order ASC, id ASC'
+      );
+      await notifyCmsDataCommitted('home_blocks', 'reordered');
+      res.json({ ok: true, items: rows.map(mapHomeBlockRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menyimpan urutan elemen halaman.',
+      });
+    }
+  });
+
+  app.put('/api/cms/home-blocks/:id', requireCmsPermission('homebuilder'), async (req: AuthenticatedRequest, res: Response) => {
+    const blockId = Number(req.params.id);
+    if (!Number.isFinite(blockId) || blockId <= 0) {
+      res.status(400).json({ ok: false, message: 'ID elemen tidak valid.' });
+      return;
+    }
+
+    const { label, config, isVisible } = req.body as {
+      label?: string;
+      config?: Record<string, unknown>;
+      isVisible?: boolean;
+    };
+
+    try {
+      const [existingRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_home_blocks WHERE id = ? LIMIT 1',
+        [blockId]
+      );
+      if (existingRows.length === 0) {
+        res.status(404).json({ ok: false, message: 'Elemen halaman tidak ditemukan.' });
+        return;
+      }
+
+      const current = mapHomeBlockRow(existingRows[0]);
+      const nextLabel =
+        typeof label === 'string' && label.trim()
+          ? label.trim().slice(0, 160)
+          : current.label;
+      const nextConfig =
+        config && typeof config === 'object' && !Array.isArray(config)
+          ? (sanitizeHomeBlockConfigValue(config) as Record<string, unknown>)
+          : current.config;
+      const nextVisible =
+        typeof isVisible === 'boolean' ? isVisible : current.isVisible;
+
+      await pool.query(
+        `UPDATE cms_home_blocks
+         SET block_label = ?, config_json = ?, is_visible = ?
+         WHERE id = ?`,
+        [nextLabel, JSON.stringify(nextConfig), nextVisible ? 1 : 0, blockId]
+      );
+
+      const [updatedRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_home_blocks WHERE id = ? LIMIT 1',
+        [blockId]
+      );
+      await notifyCmsDataCommitted('home_blocks', 'updated', blockId);
+      res.json({ ok: true, item: mapHomeBlockRow(updatedRows[0]) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memperbarui elemen halaman.',
+      });
+    }
+  });
+
+  app.post('/api/cms/home-blocks/:id/duplicate', requireCmsPermission('homebuilder'), async (req: AuthenticatedRequest, res: Response) => {
+    const blockId = Number(req.params.id);
+    if (!Number.isFinite(blockId) || blockId <= 0) {
+      res.status(400).json({ ok: false, message: 'ID elemen tidak valid.' });
+      return;
+    }
+
+    const { targetPageSlug } = (req.body || {}) as { targetPageSlug?: string };
+    const cleanTargetSlug = targetPageSlug ? String(targetPageSlug).trim() : '';
+    if (cleanTargetSlug && !BUILDER_PAGE_SLUG_SET.has(cleanTargetSlug)) {
+      res.status(400).json({ ok: false, message: 'Halaman tujuan salinan tidak valid.' });
+      return;
+    }
+
+    try {
+      const [existingRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_home_blocks WHERE id = ? LIMIT 1',
+        [blockId]
+      );
+      if (existingRows.length === 0) {
+        res.status(404).json({ ok: false, message: 'Elemen yang akan diduplikasi tidak ditemukan.' });
+        return;
+      }
+
+      const source = mapHomeBlockRow(existingRows[0]);
+      const destPageSlug = (cleanTargetSlug || source.pageSlug) as BuilderPageSlug;
+      const isSamePage = destPageSlug === source.pageSlug;
+      const cloneLabel = isSamePage
+        ? `${source.label} (Salinan)`.slice(0, 160)
+        : source.label.slice(0, 160);
+
+      let insertSortOrder = source.sortOrder + 1;
+      if (isSamePage) {
+        await pool.query(
+          'UPDATE cms_home_blocks SET sort_order = sort_order + 1 WHERE page_slug = ? AND sort_order > ?',
+          [destPageSlug, source.sortOrder]
+        );
+      } else {
+        const [maxRows] = await pool.query<RowDataPacket[]>(
+          'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM cms_home_blocks WHERE page_slug = ?',
+          [destPageSlug]
+        );
+        insertSortOrder = Number(maxRows[0]?.max_order || 0) + 1;
+      }
+
+      const [result] = await pool.query<ResultSetHeader>(
+        `INSERT INTO cms_home_blocks (page_slug, block_type, block_label, config_json, sort_order, is_visible)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          destPageSlug,
+          source.blockType,
+          cloneLabel,
+          JSON.stringify(source.config),
+          insertSortOrder,
+          source.isVisible ? 1 : 0,
+        ]
+      );
+
+      const [allRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_home_blocks ORDER BY page_slug ASC, sort_order ASC, id ASC'
+      );
+      await notifyCmsDataCommitted('home_blocks', 'duplicated', result.insertId);
+      res.status(201).json({
+        ok: true,
+        newId: result.insertId,
+        targetPageSlug: destPageSlug,
+        items: allRows.map(mapHomeBlockRow),
+      });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menduplikasi elemen halaman.',
+      });
+    }
+  });
+
+  app.delete('/api/cms/home-blocks/:id', requireCmsPermission('homebuilder'), async (req: AuthenticatedRequest, res: Response) => {
+    const blockId = Number(req.params.id);
+    if (!Number.isFinite(blockId) || blockId <= 0) {
+      res.status(400).json({ ok: false, message: 'ID elemen tidak valid.' });
+      return;
+    }
+
+    try {
+      await pool.query('DELETE FROM cms_home_blocks WHERE id = ?', [blockId]);
+      const [allRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_home_blocks ORDER BY page_slug ASC, sort_order ASC, id ASC'
+      );
+      await notifyCmsDataCommitted('home_blocks', 'deleted', blockId);
+      res.json({ ok: true, items: allRows.map(mapHomeBlockRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menghapus elemen halaman.',
+      });
+    }
+  });
+
+  app.post('/api/cms/home-blocks/reset', requireCmsPermission('homebuilder'), async (req: AuthenticatedRequest, res: Response) => {
+    const { pageSlug } = (req.body || {}) as { pageSlug?: string };
+    const cleanPageSlug = pageSlug ? String(pageSlug).trim() : '';
+    if (cleanPageSlug && !BUILDER_PAGE_SLUG_SET.has(cleanPageSlug)) {
+      res.status(400).json({ ok: false, message: 'Halaman builder tidak valid.' });
+      return;
+    }
+
+    try {
+      const existingSettings = await fetchSiteSettingsMap();
+      const targetSlugs: BuilderPageSlug[] = cleanPageSlug
+        ? [cleanPageSlug as BuilderPageSlug]
+        : [...BUILDER_PAGE_SLUGS];
+
+      for (const slug of targetSlugs) {
+        await pool.query('DELETE FROM cms_home_blocks WHERE page_slug = ?', [slug]);
+        const defaults = buildDefaultBlocksForPage(slug, existingSettings);
+        for (const blk of defaults) {
+          await pool.query(
+            `INSERT INTO cms_home_blocks (page_slug, block_type, block_label, config_json, sort_order, is_visible)
+             VALUES (?, ?, ?, ?, ?, 1)`,
+            [slug, blk.blockType, blk.label, JSON.stringify(blk.config), blk.sortOrder]
+          );
+        }
+      }
+
+      const [allRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_home_blocks ORDER BY page_slug ASC, sort_order ASC, id ASC'
+      );
+      await notifyCmsDataCommitted('home_blocks', 'reset');
+      res.json({ ok: true, items: allRows.map(mapHomeBlockRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal mereset susunan elemen.',
+      });
+    }
+  });
+
+  // CMS Auto-Registered Custom Element Presets
+  app.get('/api/cms/builder-presets', requireCmsPermission('homebuilder'), async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_builder_presets ORDER BY id DESC'
+      );
+      res.json({ ok: true, items: rows.map(mapBuilderPresetRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memuat katalog elemen tersimpan.',
+      });
+    }
+  });
+
+  app.post('/api/cms/builder-presets', requireCmsPermission('homebuilder'), async (req: AuthenticatedRequest, res: Response) => {
+    const { name, description, blockType, config } = req.body as {
+      name?: string;
+      description?: string;
+      blockType?: string;
+      config?: Record<string, unknown>;
+    };
+
+    const cleanType = String(blockType || '').trim();
+    if (!HOME_BLOCK_TYPE_SET.has(cleanType)) {
+      res.status(400).json({ ok: false, message: 'Tipe dasar elemen tidak valid.' });
+      return;
+    }
+
+    const cleanName = String(name || '').trim().slice(0, 160);
+    if (!cleanName) {
+      res.status(400).json({ ok: false, message: 'Nama elemen untuk katalog wajib diisi.' });
+      return;
+    }
+
+    const cleanDesc = String(description || '').trim().slice(0, 400);
+    const cleanConfig =
+      config && typeof config === 'object' && !Array.isArray(config)
+        ? (sanitizeHomeBlockConfigValue(config) as Record<string, unknown>)
+        : {};
+
+    try {
+      const [result] = await pool.query<ResultSetHeader>(
+        `INSERT INTO cms_builder_presets (name, description, block_type, config_json)
+         VALUES (?, ?, ?, ?)`,
+        [cleanName, cleanDesc, cleanType, JSON.stringify(cleanConfig)]
+      );
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_builder_presets WHERE id = ? LIMIT 1',
+        [result.insertId]
+      );
+      await notifyCmsDataCommitted('builder_presets', 'created', result.insertId);
+      res.status(201).json({ ok: true, item: mapBuilderPresetRow(rows[0]) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal mendaftarkan elemen ke katalog.',
+      });
+    }
+  });
+
+  app.delete('/api/cms/builder-presets/:id', requireCmsPermission('homebuilder'), async (req: AuthenticatedRequest, res: Response) => {
+    const presetId = Number(req.params.id);
+    if (!Number.isFinite(presetId) || presetId <= 0) {
+      res.status(400).json({ ok: false, message: 'ID elemen katalog tidak valid.' });
+      return;
+    }
+
+    try {
+      await pool.query('DELETE FROM cms_builder_presets WHERE id = ?', [presetId]);
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_builder_presets ORDER BY id DESC'
+      );
+      await notifyCmsDataCommitted('builder_presets', 'deleted', presetId);
+      res.json({ ok: true, items: rows.map(mapBuilderPresetRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menghapus elemen dari katalog.',
+      });
+    }
+  });
+
+  // CMS Dynamic Tarif Layanan CRUD & Reorder
+  app.get('/api/cms/tarif-items', requireCmsPermission('tarif'), async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_tarif_items ORDER BY sort_order ASC, id ASC'
+      );
+      res.json({ ok: true, items: rows.map(mapTarifItemRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memuat daftar kategori tarif.',
+      });
+    }
+  });
+
+  app.post('/api/cms/tarif-items', requireCmsPermission('tarif'), async (req: AuthenticatedRequest, res: Response) => {
+    const {
+      slug,
+      navLabel,
+      shortLabel,
+      title,
+      docNumber,
+      description,
+      pdfUrl,
+      localFallbackPdfUrl,
+      isActive,
+    } = req.body as Record<string, unknown>;
+
+    const cleanNav = String(navLabel || title || shortLabel || '').trim().slice(0, 200);
+    if (!cleanNav) {
+      res.status(400).json({ ok: false, message: 'Nama menu / kategori tarif wajib diisi.' });
+      return;
+    }
+
+    const rawSlug = typeof slug === 'string' && slug.trim() ? slug.trim() : slugifyTarifLabel(cleanNav);
+    const cleanSlug = rawSlug.toLowerCase().slice(0, 100);
+    if (!isValidTarifSlug(cleanSlug)) {
+      res.status(400).json({
+        ok: false,
+        message: 'Slug URL tarif hanya boleh berisi huruf kecil, angka, dan tanda hubung (-).',
+      });
+      return;
+    }
+
+    const cleanPdfUrl = typeof pdfUrl === 'string' ? pdfUrl.trim().slice(0, 1024) : '';
+    if (cleanPdfUrl && !isSafePdfReference(cleanPdfUrl)) {
+      res.status(400).json({ ok: false, message: 'Tautan PDF atau Google Drive tidak valid.' });
+      return;
+    }
+
+    const cleanLocalPdf =
+      typeof localFallbackPdfUrl === 'string' ? localFallbackPdfUrl.trim().slice(0, 1024) : '';
+    if (cleanLocalPdf && !isSafePdfReference(cleanLocalPdf)) {
+      res.status(400).json({ ok: false, message: 'Tautan PDF lokal cadangan tidak valid.' });
+      return;
+    }
+
+    try {
+      const [dupRows] = await pool.query<RowDataPacket[]>(
+        'SELECT id FROM cms_tarif_items WHERE slug = ? LIMIT 1',
+        [cleanSlug]
+      );
+      if (dupRows.length > 0) {
+        res.status(409).json({
+          ok: false,
+          message: `Slug "/tarif-layanan/${cleanSlug}" sudah digunakan kategori tarif lain.`,
+        });
+        return;
+      }
+
+      const [maxRows] = await pool.query<RowDataPacket[]>(
+        'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM cms_tarif_items'
+      );
+      const nextOrder = Number(maxRows[0]?.max_order || 0) + 1;
+
+      const cleanShort =
+        String(shortLabel || cleanNav).trim().slice(0, 120) || cleanNav.slice(0, 120);
+      const cleanTitle = String(title || cleanNav).trim().slice(0, 255) || cleanNav;
+      const cleanDocNumber = String(docNumber || '').trim().slice(0, 255);
+      const cleanDesc = String(description || '').trim().slice(0, 4000);
+
+      const [result] = await pool.query<ResultSetHeader>(
+        `INSERT INTO cms_tarif_items
+          (slug, nav_label, short_label, title, doc_number, description, pdf_url, local_fallback_pdf_url, sort_order, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          cleanSlug,
+          cleanNav,
+          cleanShort,
+          cleanTitle,
+          cleanDocNumber,
+          cleanDesc,
+          cleanPdfUrl,
+          cleanLocalPdf,
+          nextOrder,
+          isActive === false ? 0 : 1,
+        ]
+      );
+
+      const [allRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_tarif_items ORDER BY sort_order ASC, id ASC'
+      );
+      const [createdRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_tarif_items WHERE id = ? LIMIT 1',
+        [result.insertId]
+      );
+      await notifyCmsDataCommitted('tarif_items', 'created', result.insertId);
+      res.status(201).json({
+        ok: true,
+        item: mapTarifItemRow(createdRows[0]),
+        items: allRows.map(mapTarifItemRow),
+      });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menambahkan kategori tarif.',
+      });
+    }
+  });
+
+  app.put('/api/cms/tarif-items/reorder', requireCmsPermission('tarif'), async (req: AuthenticatedRequest, res: Response) => {
+    const { orderedIds } = req.body as { orderedIds?: unknown[] };
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      res.status(400).json({ ok: false, message: 'Daftar urutan tarif tidak valid.' });
+      return;
+    }
+
+    const cleanIds = orderedIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    if (cleanIds.length === 0) {
+      res.status(400).json({ ok: false, message: 'ID kategori tarif tidak valid.' });
+      return;
+    }
+
+    try {
+      const caseParts = cleanIds.map(() => 'WHEN ? THEN ?').join(' ');
+      const inPlaceholders = cleanIds.map(() => '?').join(', ');
+      const caseParams: number[] = [];
+      cleanIds.forEach((id, idx) => {
+        caseParams.push(id, idx + 1);
+      });
+      await pool.query(
+        `UPDATE cms_tarif_items SET sort_order = CASE id ${caseParts} ELSE sort_order END WHERE id IN (${inPlaceholders})`,
+        [...caseParams, ...cleanIds]
+      );
+      const [allRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_tarif_items ORDER BY sort_order ASC, id ASC'
+      );
+      await notifyCmsDataCommitted('tarif_items', 'reordered');
+      res.json({ ok: true, items: allRows.map(mapTarifItemRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memperbarui urutan kategori tarif.',
+      });
+    }
+  });
+
+  app.put('/api/cms/tarif-items/:id', requireCmsPermission('tarif'), async (req: AuthenticatedRequest, res: Response) => {
+    const tarifId = Number(req.params.id);
+    if (!Number.isFinite(tarifId) || tarifId <= 0) {
+      res.status(400).json({ ok: false, message: 'ID kategori tarif tidak valid.' });
+      return;
+    }
+
+    const {
+      slug,
+      navLabel,
+      shortLabel,
+      title,
+      docNumber,
+      description,
+      pdfUrl,
+      localFallbackPdfUrl,
+      isActive,
+    } = req.body as Record<string, unknown>;
+
+    try {
+      const [existingRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_tarif_items WHERE id = ? LIMIT 1',
+        [tarifId]
+      );
+      if (existingRows.length === 0) {
+        res.status(404).json({ ok: false, message: 'Kategori tarif tidak ditemukan.' });
+        return;
+      }
+
+      const current = mapTarifItemRow(existingRows[0]);
+      const nextSlug =
+        typeof slug === 'string' && slug.trim()
+          ? slug.trim().toLowerCase().slice(0, 100)
+          : current.slug;
+      if (!isValidTarifSlug(nextSlug)) {
+        res.status(400).json({
+          ok: false,
+          message: 'Slug URL tarif hanya boleh berisi huruf kecil, angka, dan tanda hubung (-).',
+        });
+        return;
+      }
+
+      if (nextSlug !== current.slug) {
+        const [dupRows] = await pool.query<RowDataPacket[]>(
+          'SELECT id FROM cms_tarif_items WHERE slug = ? AND id != ? LIMIT 1',
+          [nextSlug, tarifId]
+        );
+        if (dupRows.length > 0) {
+          res.status(409).json({
+            ok: false,
+            message: `Slug "/tarif-layanan/${nextSlug}" sudah digunakan kategori tarif lain.`,
+          });
+          return;
+        }
+      }
+
+      const nextNavLabel =
+        typeof navLabel === 'string' && navLabel.trim()
+          ? navLabel.trim().slice(0, 200)
+          : current.navLabel;
+      const nextShortLabel =
+        typeof shortLabel === 'string' && shortLabel.trim()
+          ? shortLabel.trim().slice(0, 120)
+          : current.shortLabel;
+      const nextTitle =
+        typeof title === 'string' && title.trim()
+          ? title.trim().slice(0, 255)
+          : current.title;
+      const nextDocNumber =
+        typeof docNumber === 'string'
+          ? docNumber.trim().slice(0, 255)
+          : current.docNumber;
+      const nextDescription =
+        typeof description === 'string'
+          ? description.trim().slice(0, 4000)
+          : current.description;
+      const nextPdfUrl =
+        typeof pdfUrl === 'string' ? pdfUrl.trim().slice(0, 1024) : current.pdfUrl;
+      if (nextPdfUrl && !isSafePdfReference(nextPdfUrl)) {
+        res.status(400).json({ ok: false, message: 'Tautan PDF atau Google Drive tidak valid.' });
+        return;
+      }
+      const nextLocalFallback =
+        typeof localFallbackPdfUrl === 'string'
+          ? localFallbackPdfUrl.trim().slice(0, 1024)
+          : current.localFallbackPdfUrl;
+      if (nextLocalFallback && !isSafePdfReference(nextLocalFallback)) {
+        res.status(400).json({ ok: false, message: 'Tautan PDF lokal cadangan tidak valid.' });
+        return;
+      }
+
+      const nextActive = typeof isActive === 'boolean' ? isActive : current.isActive;
+
+      await pool.query(
+        `UPDATE cms_tarif_items
+         SET slug = ?, nav_label = ?, short_label = ?, title = ?, doc_number = ?, description = ?, pdf_url = ?, local_fallback_pdf_url = ?, is_active = ?
+         WHERE id = ?`,
+        [
+          nextSlug,
+          nextNavLabel,
+          nextShortLabel,
+          nextTitle,
+          nextDocNumber,
+          nextDescription,
+          nextPdfUrl,
+          nextLocalFallback,
+          nextActive ? 1 : 0,
+          tarifId,
+        ]
+      );
+
+      const [updatedRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_tarif_items WHERE id = ? LIMIT 1',
+        [tarifId]
+      );
+      const [allRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_tarif_items ORDER BY sort_order ASC, id ASC'
+      );
+      await notifyCmsDataCommitted('tarif_items', 'updated', tarifId);
+      res.json({
+        ok: true,
+        item: mapTarifItemRow(updatedRows[0]),
+        items: allRows.map(mapTarifItemRow),
+      });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal memperbarui kategori tarif.',
+      });
+    }
+  });
+
+  app.delete('/api/cms/tarif-items/:id', requireCmsPermission('tarif'), async (req: AuthenticatedRequest, res: Response) => {
+    const tarifId = Number(req.params.id);
+    if (!Number.isFinite(tarifId) || tarifId <= 0) {
+      res.status(400).json({ ok: false, message: 'ID kategori tarif tidak valid.' });
+      return;
+    }
+
+    try {
+      await pool.query('DELETE FROM cms_tarif_items WHERE id = ?', [tarifId]);
+      const [allRows] = await pool.query<RowDataPacket[]>(
+        'SELECT * FROM cms_tarif_items ORDER BY sort_order ASC, id ASC'
+      );
+      await notifyCmsDataCommitted('tarif_items', 'deleted', tarifId);
+      res.json({ ok: true, items: allRows.map(mapTarifItemRow) });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Gagal menghapus kategori tarif.',
       });
     }
   });

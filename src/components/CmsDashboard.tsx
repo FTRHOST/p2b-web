@@ -17,6 +17,7 @@ import {
   NewsCategoryItem,
   PartnerLogoItem,
   SiteSettings,
+  TarifItem,
 } from '../types/cms';
 import {
   DEFAULT_NEWS_CATEGORIES,
@@ -43,16 +44,29 @@ import {
   DEFAULT_TARIF_CORNER_LABEL,
   DEFAULT_TARIF_EYEBROW,
   DEFAULT_TARIF_HERO_IMAGE,
+  DEFAULT_TARIF_ITEMS,
   DEFAULT_TARIF_PENUNJANG_DRIVE_URL,
   DEFAULT_TARIF_PENUNJANG_LOCAL_PDF,
   DEFAULT_TARIF_SUBTITLE,
   DEFAULT_TARIF_TITLE,
-  TARIF_CATEGORIES,
-  TarifCategorySlug,
   resolvePdfSource,
+  slugifyTarifLabel,
 } from '../data/tarifDefaults';
 import { TinyMceEditor } from './TinyMceEditor';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import {
+  BuilderPageSlug,
+  HomeBlockItem,
+  HomeBlockPresetItem,
+} from '../data/homeBuilderDefaults';
+import { HomePageBuilderPanel } from './HomePageBuilderPanel';
+import { CmsUsersPanel } from './CmsUsersPanel';
+import { authClient } from '../lib/authClient';
+import {
+  CmsPermission,
+  getCmsRoleMeta,
+  hasCmsPermission,
+} from '../lib/authRoles';
 
 function formatBytes(bytes?: number): string {
   if (!bytes || bytes <= 0) return '';
@@ -104,6 +118,7 @@ function paragraphsToHtml(paragraphs: string[]): string {
 
 type CmsTab =
   | 'overview'
+  | 'homebuilder'
   | 'news'
   | 'media'
   | 'logos'
@@ -111,6 +126,7 @@ type CmsTab =
   | 'tarif'
   | 'magang'
   | 'settings'
+  | 'users'
   | 'security';
 
 interface CmsDashboardProps {
@@ -271,16 +287,46 @@ export function CmsDashboard({
   const [uploadingMagangHero, setUploadingMagangHero] = useState(false);
   const [uploadingKerjasamaHero, setUploadingKerjasamaHero] = useState(false);
   const [uploadingTarifHero, setUploadingTarifHero] = useState(false);
-  const [uploadingTarifPdfSlug, setUploadingTarifPdfSlug] =
-    useState<TarifCategorySlug | null>(null);
-  const [previewTarifPdfSlug, setPreviewTarifPdfSlug] =
-    useState<TarifCategorySlug | null>('penunjang-akademik');
   const [settingsError, setSettingsError] = useState('');
+
+  // Dynamic Tarif Layanan State
+  const [tarifItems, setTarifItems] = useState<TarifItem[]>(DEFAULT_TARIF_ITEMS);
+  const [tarifDrafts, setTarifDrafts] = useState<Record<number, TarifItem>>({});
+  const [savingTarifId, setSavingTarifId] = useState<number | null>(null);
+  const [uploadingTarifPdfId, setUploadingTarifPdfId] = useState<number | 'new' | null>(null);
+  const [previewTarifPdfId, setPreviewTarifPdfId] = useState<number | null>(1);
+  const [confirmDeleteTarifId, setConfirmDeleteTarifId] = useState<number | null>(null);
+  const [deletingTarifId, setDeletingTarifId] = useState<number | null>(null);
+  const [reorderingTarif, setReorderingTarif] = useState(false);
+  const [tarifError, setTarifError] = useState('');
+  const [newTarifOpen, setNewTarifOpen] = useState(false);
+  const [creatingTarif, setCreatingTarif] = useState(false);
+  const [newTarifForm, setNewTarifForm] = useState({
+    navLabel: '',
+    shortLabel: '',
+    slug: '',
+    title: '',
+    docNumber: '',
+    description: '',
+    pdfUrl: '',
+    isActive: true,
+  });
 
   // Kerjasama Google Sheets CSV Preview State
   const [kerjasamaPreview, setKerjasamaPreview] = useState<KerjasamaDataset | null>(null);
   const [loadingKerjasamaPreview, setLoadingKerjasamaPreview] = useState(false);
   const [kerjasamaPreviewError, setKerjasamaPreviewError] = useState('');
+
+  // Multi-Page Builder State
+  const [activeBuilderPageSlug, setActiveBuilderPageSlug] =
+    useState<BuilderPageSlug>('home');
+  const [homeBlocks, setHomeBlocks] = useState<HomeBlockItem[]>([]);
+  const [builderPresets, setBuilderPresets] = useState<HomeBlockPresetItem[]>([]);
+  const [selectedHomeBlockId, setSelectedHomeBlockId] = useState<number | null>(null);
+  const [homeBlockLabelDraft, setHomeBlockLabelDraft] = useState('');
+  const [homeBlockConfigDraft, setHomeBlockConfigDraft] = useState<Record<string, unknown>>({});
+  const [homeBlockVisibleDraft, setHomeBlockVisibleDraft] = useState(true);
+  const [homeBlockDirty, setHomeBlockDirty] = useState(false);
 
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -296,6 +342,9 @@ export function CmsDashboard({
   const magangGalleryOrderDirtyRef = useRef(false);
   const magangPosOrderDirtyRef = useRef(false);
   const settingsDirtyRef = useRef(false);
+  const homeBlockDirtyRef = useRef(false);
+  const selectedHomeBlockIdRef = useRef<number | null>(null);
+  const activeBuilderPageSlugRef = useRef<BuilderPageSlug>('home');
 
   useEffect(() => {
     logoOrderDirtyRef.current = logoOrderDirty;
@@ -312,6 +361,18 @@ export function CmsDashboard({
   useEffect(() => {
     settingsDirtyRef.current = settingsDirty;
   }, [settingsDirty]);
+
+  useEffect(() => {
+    homeBlockDirtyRef.current = homeBlockDirty;
+  }, [homeBlockDirty]);
+
+  useEffect(() => {
+    selectedHomeBlockIdRef.current = selectedHomeBlockId;
+  }, [selectedHomeBlockId]);
+
+  useEffect(() => {
+    activeBuilderPageSlugRef.current = activeBuilderPageSlug;
+  }, [activeBuilderPageSlug]);
 
   const markLocalCommit = () => {
     lastLocalCommitAtRef.current = Date.now();
@@ -333,6 +394,30 @@ export function CmsDashboard({
   const loadAllCmsData = useCallback(
     async (options?: { preserveDirtyEdits?: boolean }) => {
       const preserveDirty = Boolean(options?.preserveDirtyEdits);
+      const canOverview = hasCmsPermission(user.role, 'overview');
+      const canNews = hasCmsPermission(user.role, 'news');
+      const canMediaRead =
+        canNews ||
+        hasCmsPermission(user.role, 'media_read') ||
+        hasCmsPermission(user.role, 'media_write');
+      const canLogos = hasCmsPermission(user.role, 'logos');
+      const canMagang = hasCmsPermission(user.role, 'magang');
+      const canSettings =
+        hasCmsPermission(user.role, 'settings') ||
+        hasCmsPermission(user.role, 'kerjasama') ||
+        hasCmsPermission(user.role, 'tarif');
+      const canBuilder = hasCmsPermission(user.role, 'homebuilder');
+      const canTarif = hasCmsPermission(user.role, 'tarif');
+
+      const fetchIfAllowed = (allowed: boolean, url: string) =>
+        allowed
+          ? fetch(url, {
+              headers: authHeaders(),
+              credentials: 'include',
+              cache: 'no-store',
+            })
+          : Promise.resolve(null);
+
       try {
         const [
           ovRes,
@@ -344,71 +429,41 @@ export function CmsDashboard({
           magangPosRes,
           magangAppRes,
           settingsRes,
+          homeBlocksRes,
+          builderPresetsRes,
+          tarifItemsRes,
         ] = await Promise.all([
-          fetch('/api/cms/overview', {
-            headers: authHeaders(),
-            credentials: 'include',
-            cache: 'no-store',
-          }),
-          fetch('/api/cms/news', {
-            headers: authHeaders(),
-            credentials: 'include',
-            cache: 'no-store',
-          }),
-          fetch('/api/cms/categories', {
-            headers: authHeaders(),
-            credentials: 'include',
-            cache: 'no-store',
-          }),
-          fetch('/api/cms/media', {
-            headers: authHeaders(),
-            credentials: 'include',
-            cache: 'no-store',
-          }),
-          fetch('/api/cms/partner-logos', {
-            headers: authHeaders(),
-            credentials: 'include',
-            cache: 'no-store',
-          }),
-          fetch('/api/cms/magang-gallery', {
-            headers: authHeaders(),
-            credentials: 'include',
-            cache: 'no-store',
-          }),
-          fetch('/api/cms/magang-positions', {
-            headers: authHeaders(),
-            credentials: 'include',
-            cache: 'no-store',
-          }),
-          fetch('/api/cms/magang-applications', {
-            headers: authHeaders(),
-            credentials: 'include',
-            cache: 'no-store',
-          }),
-          fetch('/api/cms/settings', {
-            headers: authHeaders(),
-            credentials: 'include',
-            cache: 'no-store',
-          }),
+          fetchIfAllowed(canOverview, '/api/cms/overview'),
+          fetchIfAllowed(canNews, '/api/cms/news'),
+          fetchIfAllowed(canNews, '/api/cms/categories'),
+          fetchIfAllowed(canMediaRead, '/api/cms/media'),
+          fetchIfAllowed(canLogos, '/api/cms/partner-logos'),
+          fetchIfAllowed(canMagang, '/api/cms/magang-gallery'),
+          fetchIfAllowed(canMagang, '/api/cms/magang-positions'),
+          fetchIfAllowed(canMagang, '/api/cms/magang-applications'),
+          fetchIfAllowed(canSettings, '/api/cms/settings'),
+          fetchIfAllowed(canBuilder, '/api/cms/home-blocks'),
+          fetchIfAllowed(canBuilder, '/api/cms/builder-presets'),
+          fetchIfAllowed(canTarif, '/api/cms/tarif-items'),
         ]);
 
-        if (ovRes.ok) {
+        if (ovRes?.ok) {
           const d = (await ovRes.json()) as { stats?: CmsStats };
           if (d.stats) setStats(d.stats);
         }
-        if (newsRes.ok) {
+        if (newsRes?.ok) {
           const d = (await newsRes.json()) as { items?: CmsNewsItem[] };
           if (d.items) setNewsItems(d.items);
         }
-        if (catRes.ok) {
+        if (catRes?.ok) {
           const d = (await catRes.json()) as { items?: NewsCategoryItem[] };
           if (d.items && d.items.length > 0) setNewsCategories(d.items);
         }
-        if (mediaRes.ok) {
+        if (mediaRes?.ok) {
           const d = (await mediaRes.json()) as { items?: CmsMediaItem[] };
           if (d.items) setMediaItems(d.items);
         }
-        if (logoRes.ok && (!preserveDirty || !logoOrderDirtyRef.current)) {
+        if (logoRes?.ok && (!preserveDirty || !logoOrderDirtyRef.current)) {
           const d = (await logoRes.json()) as { items?: PartnerLogoItem[] };
           if (d.items) {
             setPartnerLogos(d.items);
@@ -416,7 +471,7 @@ export function CmsDashboard({
           }
         }
         if (
-          magangGalleryRes.ok &&
+          magangGalleryRes?.ok &&
           (!preserveDirty || !magangGalleryOrderDirtyRef.current)
         ) {
           const d = (await magangGalleryRes.json()) as {
@@ -428,7 +483,7 @@ export function CmsDashboard({
           }
         }
         if (
-          magangPosRes.ok &&
+          magangPosRes?.ok &&
           (!preserveDirty || !magangPosOrderDirtyRef.current)
         ) {
           const d = (await magangPosRes.json()) as {
@@ -439,7 +494,7 @@ export function CmsDashboard({
             setPosOrderDirty(false);
           }
         }
-        if (magangAppRes.ok) {
+        if (magangAppRes?.ok) {
           const d = (await magangAppRes.json()) as {
             items?: MagangApplicationItem[];
           };
@@ -447,18 +502,67 @@ export function CmsDashboard({
             setMagangApplications(d.items);
           }
         }
-        if (settingsRes.ok && (!preserveDirty || !settingsDirtyRef.current)) {
+        if (settingsRes?.ok && (!preserveDirty || !settingsDirtyRef.current)) {
           const d = (await settingsRes.json()) as { settings?: SiteSettings };
           if (d.settings) {
             setSettingsForm(d.settings);
             setSettingsDirty(false);
           }
         }
+        if (homeBlocksRes?.ok) {
+          const d = (await homeBlocksRes.json()) as { items?: HomeBlockItem[] };
+          if (Array.isArray(d.items)) {
+            setHomeBlocks(d.items);
+            if (!preserveDirty || !homeBlockDirtyRef.current) {
+              const currentId = selectedHomeBlockIdRef.current;
+              const curSlug = activeBuilderPageSlugRef.current;
+              const pageList = d.items.filter(
+                (item) => (item.pageSlug || 'home') === curSlug
+              );
+              const target =
+                pageList.find((item) => item.id === currentId) ||
+                pageList[0] ||
+                d.items[0];
+              if (target) {
+                setSelectedHomeBlockId(target.id);
+                setHomeBlockLabelDraft(target.label);
+                setHomeBlockConfigDraft(
+                  typeof structuredClone === 'function'
+                    ? structuredClone(target.config || {})
+                    : (JSON.parse(JSON.stringify(target.config || {})) as Record<string, unknown>)
+                );
+                setHomeBlockVisibleDraft(target.isVisible);
+                setHomeBlockDirty(false);
+              }
+            }
+          }
+        }
+        if (builderPresetsRes?.ok) {
+          const d = (await builderPresetsRes.json()) as {
+            items?: HomeBlockPresetItem[];
+          };
+          if (Array.isArray(d.items)) {
+            setBuilderPresets(d.items);
+          }
+        }
+        if (tarifItemsRes?.ok) {
+          const d = (await tarifItemsRes.json()) as { items?: TarifItem[] };
+          if (Array.isArray(d.items)) {
+            setTarifItems(d.items);
+            setTarifDrafts((prev) => {
+              const next: Record<number, TarifItem> = {};
+              for (const item of d.items!) {
+                next[item.id] = preserveDirty && prev[item.id] ? prev[item.id] : { ...item };
+              }
+              return next;
+            });
+          }
+        }
       } catch {
         // Keep current state if transient network error
       }
     },
-    [authHeaders]
+    [authHeaders, user.role]
   );
 
   useEffect(() => {
@@ -1995,32 +2099,251 @@ export function CmsDashboard({
     }
   };
 
-  const handleUploadTarifCategoryPdf = async (
-    slug: TarifCategorySlug,
-    settingKey:
-      | 'tarif_penunjang_pdf_url'
-      | 'tarif_klinik_pdf_url'
-      | 'tarif_jurnal_pdf_url',
+  const updateTarifDraft = (id: number, patch: Partial<TarifItem>) => {
+    setTarifDrafts((prev) => {
+      const base =
+        prev[id] || tarifItems.find((t) => t.id === id) || ({ id } as TarifItem);
+      return { ...prev, [id]: { ...base, ...patch } };
+    });
+    setTarifError('');
+  };
+
+  const handleUploadTarifPdf = async (
+    target: number | 'new',
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    setUploadingTarifPdfSlug(slug);
-    setSettingsError('');
+    setUploadingTarifPdfId(target);
+    setTarifError('');
     try {
       markLocalCommit();
       const media = await uploadSingleMedia(file);
-      updateSettingField(settingKey, media.url);
-      setPreviewTarifPdfSlug(slug);
+      if (target === 'new') {
+        setNewTarifForm((prev) => ({ ...prev, pdfUrl: media.url }));
+      } else {
+        updateTarifDraft(target, { pdfUrl: media.url });
+        setPreviewTarifPdfId(target);
+      }
       await loadAllCmsData({ preserveDirtyEdits: true });
-      notify(`Dokumen PDF "${file.name}" berhasil diunggah dan ditautkan.`);
+      notify(`Dokumen PDF "${file.name}" berhasil diunggah ke Pustaka Media.`);
     } catch (err) {
-      setSettingsError(
-        err instanceof Error ? err.message : 'Gagal mengunggah dokumen PDF tarif layanan.'
+      setTarifError(
+        err instanceof Error ? err.message : 'Gagal mengunggah dokumen PDF tarif.'
       );
     } finally {
-      setUploadingTarifPdfSlug(null);
+      setUploadingTarifPdfId(null);
+    }
+  };
+
+  const handleCreateTarifItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanNav = newTarifForm.navLabel.trim();
+    if (!cleanNav) {
+      setTarifError('Nama kategori / menu Tarif Layanan wajib diisi.');
+      return;
+    }
+    setCreatingTarif(true);
+    setTarifError('');
+    try {
+      markLocalCommit();
+      const res = await fetch('/api/cms/tarif-items', {
+        method: 'POST',
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          ...newTarifForm,
+          slug: newTarifForm.slug.trim() || slugifyTarifLabel(cleanNav),
+          shortLabel: newTarifForm.shortLabel.trim() || cleanNav,
+          title: newTarifForm.title.trim() || cleanNav,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        item?: TarifItem;
+        items?: TarifItem[];
+        message?: string;
+      };
+      if (!res.ok || !data.ok || !Array.isArray(data.items)) {
+        setTarifError(data.message || 'Gagal menambah kategori tarif.');
+        return;
+      }
+      setTarifItems(data.items);
+      const nextDrafts: Record<number, TarifItem> = {};
+      data.items.forEach((it) => {
+        nextDrafts[it.id] = { ...it };
+      });
+      setTarifDrafts(nextDrafts);
+      if (data.item) setPreviewTarifPdfId(data.item.id);
+      setNewTarifOpen(false);
+      setNewTarifForm({
+        navLabel: '',
+        shortLabel: '',
+        slug: '',
+        title: '',
+        docNumber: '',
+        description: '',
+        pdfUrl: '',
+        isActive: true,
+      });
+      onPublicDataChanged();
+      notify(`Kategori tarif "${cleanNav}" ditambahkan dan langsung muncul di Navbar & halaman Tarif.`);
+    } catch {
+      setTarifError('Tidak dapat terhubung ke server CMS.');
+    } finally {
+      setCreatingTarif(false);
+    }
+  };
+
+  const handleSaveTarifItem = async (tarifId: number) => {
+    const draft =
+      tarifDrafts[tarifId] || tarifItems.find((t) => t.id === tarifId);
+    if (!draft) return;
+    setSavingTarifId(tarifId);
+    setTarifError('');
+    try {
+      markLocalCommit();
+      const res = await fetch(`/api/cms/tarif-items/${tarifId}`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(draft),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        items?: TarifItem[];
+        message?: string;
+      };
+      if (!res.ok || !data.ok || !Array.isArray(data.items)) {
+        setTarifError(data.message || 'Gagal menyimpan kategori tarif.');
+        return;
+      }
+      setTarifItems(data.items);
+      const nextDrafts: Record<number, TarifItem> = {};
+      data.items.forEach((it) => {
+        nextDrafts[it.id] = { ...it };
+      });
+      setTarifDrafts(nextDrafts);
+      onPublicDataChanged();
+      notify(`Kategori tarif "${draft.navLabel}" disimpan dan disinkronkan real-time.`);
+    } catch {
+      setTarifError('Tidak dapat terhubung ke server CMS.');
+    } finally {
+      setSavingTarifId(null);
+    }
+  };
+
+  const handleToggleTarifActive = async (item: TarifItem) => {
+    const nextActive = !item.isActive;
+    setSavingTarifId(item.id);
+    setTarifError('');
+    try {
+      markLocalCommit();
+      const res = await fetch(`/api/cms/tarif-items/${item.id}`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ isActive: nextActive }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        items?: TarifItem[];
+        message?: string;
+      };
+      if (!res.ok || !data.ok || !Array.isArray(data.items)) {
+        setTarifError(data.message || 'Gagal mengubah status tampil tarif.');
+        return;
+      }
+      setTarifItems(data.items);
+      setTarifDrafts((prev) => {
+        const next = { ...prev };
+        data.items!.forEach((it) => {
+          next[it.id] = prev[it.id]
+            ? { ...prev[it.id], isActive: it.isActive }
+            : { ...it };
+        });
+        return next;
+      });
+      onPublicDataChanged();
+      notify(
+        nextActive
+          ? `Tarif "${item.navLabel}" diaktifkan.`
+          : `Tarif "${item.navLabel}" disembunyikan sementara.`
+      );
+    } catch {
+      setTarifError('Gagal memperbarui status tarif.');
+    } finally {
+      setSavingTarifId(null);
+    }
+  };
+
+  const handleMoveTarifItem = async (index: number, direction: -1 | 1) => {
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= tarifItems.length) return;
+    const nextList = [...tarifItems];
+    const [moved] = nextList.splice(index, 1);
+    nextList.splice(targetIdx, 0, moved);
+    setTarifItems(nextList);
+    setReorderingTarif(true);
+    setTarifError('');
+    try {
+      markLocalCommit();
+      const res = await fetch('/api/cms/tarif-items/reorder', {
+        method: 'PUT',
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ orderedIds: nextList.map((t) => t.id) }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        items?: TarifItem[];
+        message?: string;
+      };
+      if (res.ok && data.ok && Array.isArray(data.items)) {
+        setTarifItems(data.items);
+        onPublicDataChanged();
+        notify('Urutan kategori tarif diperbarui.');
+      }
+    } catch {
+      setTarifError('Gagal menyimpan urutan kategori tarif.');
+    } finally {
+      setReorderingTarif(false);
+    }
+  };
+
+  const handleDeleteTarifItem = async (tarifId: number) => {
+    setDeletingTarifId(tarifId);
+    setTarifError('');
+    try {
+      markLocalCommit();
+      const res = await fetch(`/api/cms/tarif-items/${tarifId}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+        credentials: 'include',
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        items?: TarifItem[];
+        message?: string;
+      };
+      if (!res.ok || !data.ok || !Array.isArray(data.items)) {
+        setTarifError(data.message || 'Gagal menghapus kategori tarif.');
+        return;
+      }
+      setTarifItems(data.items);
+      setConfirmDeleteTarifId(null);
+      setTarifDrafts((prev) => {
+        const next = { ...prev };
+        delete next[tarifId];
+        return next;
+      });
+      onPublicDataChanged();
+      notify('Kategori tarif berhasil dihapus.');
+    } catch {
+      setTarifError('Gagal menghapus kategori tarif.');
+    } finally {
+      setDeletingTarifId(null);
     }
   };
 
@@ -2114,6 +2437,11 @@ export function CmsDashboard({
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPasswordStatus(null);
+    if (!currentPassword) {
+      setPasswordStatus({ type: 'err', msg: 'Password saat ini wajib diisi.' });
+      return;
+    }
     if (newPassword.length < 6) {
       setPasswordStatus({ type: 'err', msg: 'Password baru minimal 6 karakter.' });
       return;
@@ -2123,22 +2451,27 @@ export function CmsDashboard({
       return;
     }
 
-    const res = await fetch('/api/cms/password', {
-      method: 'PUT',
-      headers: authHeaders(),
-      credentials: 'include',
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
-    const data = (await res.json()) as { ok?: boolean; message?: string };
-    if (res.ok && data.ok) {
+    try {
+      const res = await authClient.changePassword({
+        currentPassword,
+        newPassword,
+        revokeOtherSessions: false,
+      });
+      if (res.error) {
+        setPasswordStatus({
+          type: 'err',
+          msg: res.error.message || 'Password saat ini tidak sesuai.',
+        });
+        return;
+      }
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setPasswordStatus({ type: 'ok', msg: 'Password admin CMS berhasil diperbarui.' });
-    } else {
+      setPasswordStatus({ type: 'ok', msg: 'Password akun berhasil diperbarui melalui Better Auth.' });
+    } catch {
       setPasswordStatus({
         type: 'err',
-        msg: data.message || 'Gagal memperbarui password.',
+        msg: 'Gagal memperbarui password. Silakan coba kembali.',
       });
     }
   };
@@ -2186,17 +2519,36 @@ export function CmsDashboard({
     );
   });
 
-  const tabs: { id: CmsTab; label: string; icon: string }[] = [
-    { id: 'overview', label: 'Ringkasan', icon: 'mdi:view-grid-outline' },
-    { id: 'news', label: 'Kelola Berita', icon: 'mdi:newspaper-variant-outline' },
-    { id: 'media', label: 'Kelola Media', icon: 'mdi:folder-open-outline' },
-    { id: 'logos', label: 'Logo Mitra', icon: 'mdi:office-building-outline' },
-    { id: 'kerjasama', label: 'Kerjasama', icon: 'mdi:handshake-outline' },
-    { id: 'tarif', label: 'Tarif Layanan', icon: 'mdi:file-document-outline' },
-    { id: 'magang', label: 'Magang P2B', icon: 'mdi:school-outline' },
-    { id: 'settings', label: 'Pengaturan Situs', icon: 'mdi:compass-outline' },
+  const roleMeta = getCmsRoleMeta(user.role);
+
+  const allTabs: {
+    id: CmsTab;
+    label: string;
+    icon: string;
+    permission?: CmsPermission;
+  }[] = [
+    { id: 'overview', label: 'Ringkasan', icon: 'mdi:view-grid-outline', permission: 'overview' },
+    { id: 'homebuilder', label: 'Page Builder', icon: 'mdi:layers-outline', permission: 'homebuilder' },
+    { id: 'news', label: 'Kelola Berita', icon: 'mdi:newspaper-variant-outline', permission: 'news' },
+    { id: 'media', label: 'Kelola Media', icon: 'mdi:folder-open-outline', permission: 'media_write' },
+    { id: 'logos', label: 'Logo Mitra', icon: 'mdi:office-building-outline', permission: 'logos' },
+    { id: 'kerjasama', label: 'Kerjasama', icon: 'mdi:handshake-outline', permission: 'kerjasama' },
+    { id: 'tarif', label: 'Tarif Layanan', icon: 'mdi:file-document-outline', permission: 'tarif' },
+    { id: 'magang', label: 'Magang P2B', icon: 'mdi:school-outline', permission: 'magang' },
+    { id: 'settings', label: 'Pengaturan Situs', icon: 'mdi:compass-outline', permission: 'settings' },
+    { id: 'users', label: 'Pengguna & Peran', icon: 'mdi:account-group-outline', permission: 'users' },
     { id: 'security', label: 'Keamanan Akun', icon: 'mdi:lock-outline' },
   ];
+
+  const tabs = allTabs.filter(
+    (tab) => !tab.permission || hasCmsPermission(user.role, tab.permission)
+  );
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(tabs[0]?.id || 'overview');
+    }
+  }, [activeTab, tabs]);
 
   return (
     <div className="min-h-screen bg-[#F6F3EC] text-[#164234] p-3 md:p-5 flex flex-col items-center">
@@ -2212,10 +2564,10 @@ export function CmsDashboard({
             />
             <div className="hidden sm:flex flex-col">
               <span className="text-xs uppercase tracking-[0.16em] text-[#F4D993]">
-                CMS Panel
+                CMS Panel · {user.roleLabel || roleMeta.label}
               </span>
               <span className="text-sm text-[#FAF8F3]/90">
-                {user.displayName} ({user.role})
+                {user.displayName} (@{user.username})
               </span>
             </div>
           </div>
@@ -2810,6 +3162,42 @@ export function CmsDashboard({
                   </button>
                 </div>
               </div>
+            )}
+
+            {activeTab === 'homebuilder' && (
+              <HomePageBuilderPanel
+                activePageSlug={activeBuilderPageSlug}
+                setActivePageSlug={setActiveBuilderPageSlug}
+                blocks={homeBlocks}
+                setBlocks={setHomeBlocks}
+                presets={builderPresets}
+                setPresets={setBuilderPresets}
+                selectedBlockId={selectedHomeBlockId}
+                setSelectedBlockId={setSelectedHomeBlockId}
+                labelDraft={homeBlockLabelDraft}
+                setLabelDraft={setHomeBlockLabelDraft}
+                configDraft={homeBlockConfigDraft}
+                setConfigDraft={setHomeBlockConfigDraft}
+                visibleDraft={homeBlockVisibleDraft}
+                setVisibleDraft={setHomeBlockVisibleDraft}
+                dirty={homeBlockDirty}
+                setDirty={setHomeBlockDirty}
+                mediaItems={mediaItems}
+                token={token}
+                uploadSingleMedia={uploadSingleMedia}
+                reloadCmsData={loadAllCmsData}
+                onCommitted={(msg) => {
+                  markLocalCommit();
+                  onPublicDataChanged();
+                  notify(msg);
+                }}
+                onViewPage={(targetPath) => {
+                  window.history.pushState(null, '', targetPath);
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                  window.scrollTo({ top: 0 });
+                }}
+                onSwitchTab={(tab) => setActiveTab(tab)}
+              />
             )}
 
             {activeTab === 'news' && (
@@ -3961,19 +4349,22 @@ export function CmsDashboard({
         )}
 
         {activeTab === 'tarif' && (
-          <form onSubmit={handleSaveSettings} className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6">
             {/* Panel 0: Hero Halaman Tarif Layanan */}
-            <div className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/75 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6">
+            <form
+              onSubmit={handleSaveSettings}
+              className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/75 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6"
+            >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#C9A45A]/20 pb-5">
                 <div className="flex flex-col gap-1">
                   <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
                     Eksklusif Halaman /tarif-layanan · Sinkron Real-Time MariaDB
                   </span>
                   <h2 className="text-xl sm:text-2xl font-normal text-[#164234]">
-                    Hero &amp; Dokumen PDF Tarif Layanan
+                    Hero Halaman Tarif Layanan
                   </h2>
                   <p className="text-xs sm:text-sm text-[#3E544B]">
-                    Atur gambar hero halaman Tarif Layanan serta unggah berkas PDF atau tautan Google Drive untuk setiap kategori layanan yang ditampilkan di PDF Viewer publik.
+                    Atur gambar banner, judul, dan deskripsi hero pada halaman Tarif Layanan.
                   </p>
                 </div>
 
@@ -3993,16 +4384,12 @@ export function CmsDashboard({
                   )}
                   <button
                     type="submit"
-                    disabled={
-                      savingSettings ||
-                      uploadingTarifHero ||
-                      uploadingTarifPdfSlug !== null
-                    }
+                    disabled={savingSettings || uploadingTarifHero}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
                   >
                     <Icon icon="mdi:check" className="w-4 h-4 text-[#F4D993]" />
                     <span>
-                      {savingSettings ? 'Menyimpan...' : 'Simpan Pengaturan Tarif'}
+                      {savingSettings ? 'Menyimpan...' : 'Simpan Hero Tarif'}
                     </span>
                   </button>
                 </div>
@@ -4189,314 +4576,597 @@ export function CmsDashboard({
                   </div>
                 </div>
               </div>
-            </div>
+            </form>
 
-            {/* Panel 1: Dokumen PDF per Kategori Tarif Layanan */}
+            {/* Panel 1: Dynamic Manajemen Kategori & Dokumen PDF Tarif Layanan */}
             <div className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/75 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#C9A45A]/20 pb-4">
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
-                    Manajemen Berkas PDF Viewer · 3 Kategori Tarif Layanan
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26] tabular-nums">
+                    Kategori Dinamis Tarif Layanan ({tarifItems.length} Kategori)
                   </span>
                   <h3 className="text-xl sm:text-2xl font-normal text-[#164234]">
-                    Konfigurasi Dokumen PDF per Kategori
+                    Tambah, Edit, Urutkan &amp; Hapus Tarif Layanan
                   </h3>
                   <p className="text-xs sm:text-sm text-[#3E544B]">
-                    Unggah file PDF langsung ke CMS atau masukkan tautan Google Drive (otomatis dikonversi menjadi PDF Viewer yang dapat dibaca dan diunduh pengunjung).
+                    Daftar kategori tarif di bawah ini otomatis membentuk submenu pada Navbar &ldquo;Tarif Layanan&rdquo; serta tab pada halaman publik.
                   </p>
                 </div>
 
                 <button
-                  type="submit"
-                  disabled={
-                    savingSettings ||
-                    uploadingTarifHero ||
-                    uploadingTarifPdfSlug !== null
-                  }
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap w-fit"
+                  type="button"
+                  onClick={() => {
+                    setNewTarifOpen((prev) => !prev);
+                    setTarifError('');
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap w-fit"
                 >
-                  <Icon icon="mdi:check" className="w-4 h-4 text-[#F4D993]" />
+                  <Icon
+                    icon={newTarifOpen ? 'mdi:close' : 'mdi:plus'}
+                    className="w-4 h-4 text-[#F4D993]"
+                  />
                   <span>
-                    {savingSettings ? 'Menyimpan...' : 'Simpan Semua Perubahan'}
+                    {newTarifOpen ? 'Tutup Form Baru' : 'Tambah Kategori Tarif Baru'}
                   </span>
                 </button>
               </div>
 
-              <div className="flex flex-col gap-6">
-                {TARIF_CATEGORIES.map((category, idx) => {
-                  const rawPdfVal = settingsForm[category.settingKeys.pdfUrl] || '';
-                  const effectiveRawPdf =
-                    rawPdfVal.trim() || category.defaultPdfUrl;
-                  const resolvedPreview = resolvePdfSource(effectiveRawPdf);
-                  const isPreviewOpen = previewTarifPdfSlug === category.slug;
-                  const isUploadingThis = uploadingTarifPdfSlug === category.slug;
-                  const pdfMediaOptions = mediaItems.filter(
-                    (m) => m.mimeType === 'application/pdf'
-                  );
+              {tarifError && (
+                <div
+                  role="alert"
+                  className="px-4 py-3 rounded-2xl bg-[#9b2c2c]/10 border border-[#9b2c2c]/25 text-xs sm:text-sm text-[#9b2c2c]"
+                >
+                  {tarifError}
+                </div>
+              )}
 
-                  return (
-                    <div
-                      key={category.slug}
-                      className="rounded-3xl bg-[#FAF8F3] border border-[#C9A45A]/30 p-5 sm:p-6 flex flex-col gap-5"
-                    >
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#C9A45A]/20 pb-4">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs uppercase tracking-wider text-[#8F6D26] tabular-nums">
-                            Kategori 0{idx + 1} · /tarif-layanan/{category.slug}
+              {/* Create New Tarif Category Form */}
+              {newTarifOpen && (
+                <form
+                  onSubmit={handleCreateTarifItem}
+                  className="rounded-3xl bg-[#FAF8F3] border border-[#164234]/35 p-5 sm:p-6 flex flex-col gap-4"
+                >
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Buat Kategori Tarif Layanan Baru
+                  </span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-[#3E544B]">
+                        Nama Menu / Kategori *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newTarifForm.navLabel}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewTarifForm((prev) => ({
+                            ...prev,
+                            navLabel: val,
+                            shortLabel: prev.shortLabel || val,
+                            slug: prev.slug || slugifyTarifLabel(val),
+                            title: prev.title || val,
+                          }));
+                        }}
+                        placeholder="Contoh: Tarif Layanan Lab Halal"
+                        className="px-4 py-2.5 rounded-xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-[#3E544B]">
+                        Slug URL (/tarif-layanan/...)
+                      </label>
+                      <input
+                        type="text"
+                        value={newTarifForm.slug}
+                        onChange={(e) =>
+                          setNewTarifForm((prev) => ({ ...prev, slug: e.target.value }))
+                        }
+                        placeholder="lab-halal"
+                        className="px-4 py-2.5 rounded-xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-[#3E544B]">Label Tab Ringkas</label>
+                      <input
+                        type="text"
+                        value={newTarifForm.shortLabel}
+                        onChange={(e) =>
+                          setNewTarifForm((prev) => ({
+                            ...prev,
+                            shortLabel: e.target.value,
+                          }))
+                        }
+                        placeholder="Lab Halal"
+                        className="px-4 py-2.5 rounded-xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-[#3E544B]">
+                        Nomor Keputusan / SK
+                      </label>
+                      <input
+                        type="text"
+                        value={newTarifForm.docNumber}
+                        onChange={(e) =>
+                          setNewTarifForm((prev) => ({
+                            ...prev,
+                            docNumber: e.target.value,
+                          }))
+                        }
+                        placeholder="Keputusan Rektor No. ..."
+                        className="px-4 py-2.5 rounded-xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                      />
+                    </div>
+                    <div className="md:col-span-2 flex flex-col gap-1">
+                      <label className="text-xs text-[#3E544B]">Judul Dokumen</label>
+                      <input
+                        type="text"
+                        value={newTarifForm.title}
+                        onChange={(e) =>
+                          setNewTarifForm((prev) => ({ ...prev, title: e.target.value }))
+                        }
+                        placeholder="Tarif Layanan Lab Halal UIN Salatiga"
+                        className="px-4 py-2.5 rounded-xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                      />
+                    </div>
+                    <div className="md:col-span-2 flex flex-col gap-1.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-xs text-[#3E544B]">
+                          Tautan File PDF atau Google Drive
+                        </label>
+                        <label className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#164234] text-[#F6F3EC] text-xs cursor-pointer">
+                          <Icon icon="mdi:upload-outline" className="w-3.5 h-3.5 text-[#F4D993]" />
+                          <span>
+                            {uploadingTarifPdfId === 'new'
+                              ? 'Mengunggah...'
+                              : 'Unggah File PDF'}
                           </span>
-                          <h4 className="text-lg sm:text-xl font-normal text-[#164234]">
-                            {category.navLabel}
-                          </h4>
-                        </div>
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            disabled={uploadingTarifPdfId !== null}
+                            onChange={(e) => void handleUploadTarifPdf('new', e)}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                      <input
+                        type="text"
+                        value={newTarifForm.pdfUrl}
+                        onChange={(e) =>
+                          setNewTarifForm((prev) => ({ ...prev, pdfUrl: e.target.value }))
+                        }
+                        placeholder="https://drive.google.com/file/d/... atau /api/media/..."
+                        className="px-4 py-2.5 rounded-xl bg-white border border-[#C9A45A]/30 text-xs sm:text-sm text-[#164234]"
+                      />
+                    </div>
+                    <div className="md:col-span-2 flex flex-col gap-1">
+                      <label className="text-xs text-[#3E544B]">Deskripsi Singkat</label>
+                      <textarea
+                        rows={2}
+                        value={newTarifForm.description}
+                        onChange={(e) =>
+                          setNewTarifForm((prev) => ({
+                            ...prev,
+                            description: e.target.value,
+                          }))
+                        }
+                        placeholder="Keterangan singkat jenis layanan dan cakupan tarif."
+                        className="px-4 py-2.5 rounded-xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewTarifOpen(false)}
+                      className="px-4 py-2 rounded-full bg-white border border-[#C9A45A]/35 text-xs text-[#3E544B] cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={creatingTarif || uploadingTarifPdfId === 'new'}
+                      className="inline-flex items-center gap-1.5 px-5 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer"
+                    >
+                      <Icon icon="mdi:check" className="w-4 h-4 text-[#F4D993]" />
+                      <span>{creatingTarif ? 'Menyimpan...' : 'Simpan Kategori Baru'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
 
-                        <div className="flex flex-wrap items-center gap-2">
-                          <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer transition-colors">
-                            <Icon
-                              icon="mdi:upload-outline"
-                              className="w-3.5 h-3.5 text-[#F4D993]"
-                            />
-                            <span>
-                              {isUploadingThis
-                                ? 'Mengunggah PDF...'
-                                : 'Unggah File PDF'}
-                            </span>
-                            <input
-                              type="file"
-                              accept="application/pdf"
-                              disabled={isUploadingThis}
-                              onChange={(e) =>
-                                void handleUploadTarifCategoryPdf(
-                                  category.slug,
-                                  category.settingKeys.pdfUrl,
-                                  e
-                                )
-                              }
-                              className="hidden"
-                            />
-                          </label>
+              {tarifItems.length === 0 ? (
+                <div className="rounded-2xl bg-[#FAF8F3] border border-dashed border-[#C9A45A]/45 p-8 text-center text-sm text-[#3E544B]">
+                  Belum ada kategori tarif layanan. Klik &ldquo;Tambah Kategori Tarif Baru&rdquo; untuk menambahkan dokumen tarif PDF.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-6">
+                  {tarifItems.map((item, idx) => {
+                    const draft = tarifDrafts[item.id] || item;
+                    const effectivePdf =
+                      draft.pdfUrl.trim() || item.localFallbackPdfUrl || '';
+                    const resolvedPreview = resolvePdfSource(effectivePdf);
+                    const isPreviewOpen = previewTarifPdfId === item.id;
+                    const isUploadingThis = uploadingTarifPdfId === item.id;
+                    const isSavingThis = savingTarifId === item.id;
+                    const isConfirmDel = confirmDeleteTarifId === item.id;
+                    const pdfMediaOptions = mediaItems.filter(
+                      (m) => m.mimeType === 'application/pdf'
+                    );
 
-                          {resolvedPreview.hasSource && (
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-3xl bg-[#FAF8F3] border border-[#C9A45A]/30 p-5 sm:p-6 flex flex-col gap-5"
+                      >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#C9A45A]/20 pb-4">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wider text-[#8F6D26] tabular-nums">
+                              <span>
+                                Kategori #{String(idx + 1).padStart(2, '0')}
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span>/tarif-layanan/{draft.slug}</span>
+                              <span aria-hidden="true">·</span>
+                              <span
+                                className={
+                                  item.isActive ? 'text-[#164234]' : 'text-[#9b2c2c]'
+                                }
+                              >
+                                {item.isActive ? 'Aktif di Menu' : 'Disembunyikan'}
+                              </span>
+                            </div>
+                            <h4 className="text-lg sm:text-xl font-normal text-[#164234]">
+                              {draft.navLabel || item.navLabel}
+                            </h4>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
-                              onClick={() =>
-                                setPreviewTarifPdfSlug(
-                                  isPreviewOpen ? null : category.slug
-                                )
+                              disabled={idx === 0 || reorderingTarif}
+                              onClick={() => void handleMoveTarifItem(idx, -1)}
+                              title="Geser ke atas"
+                              className="p-2 rounded-full bg-white hover:bg-[#EAE3D2] disabled:opacity-40 border border-[#C9A45A]/35 text-[#164234] cursor-pointer"
+                            >
+                              <Icon icon="mdi:arrow-up" className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={
+                                idx === tarifItems.length - 1 || reorderingTarif
                               }
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white hover:bg-[#EAE3D2] text-[#164234] border border-[#C9A45A]/40 text-xs cursor-pointer transition-colors"
+                              onClick={() => void handleMoveTarifItem(idx, 1)}
+                              title="Geser ke bawah"
+                              className="p-2 rounded-full bg-white hover:bg-[#EAE3D2] disabled:opacity-40 border border-[#C9A45A]/35 text-[#164234] cursor-pointer"
+                            >
+                              <Icon icon="mdi:arrow-down" className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isSavingThis}
+                              onClick={() => void handleToggleTarifActive(item)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white hover:bg-[#EAE3D2] text-[#164234] border border-[#C9A45A]/40 text-xs cursor-pointer"
                             >
                               <Icon
                                 icon={
-                                  isPreviewOpen
-                                    ? 'mdi:eye-off-outline'
-                                    : 'mdi:eye-outline'
+                                  item.isActive
+                                    ? 'mdi:eye-outline'
+                                    : 'mdi:eye-off-outline'
                                 }
                                 className="w-3.5 h-3.5"
                               />
-                              <span>
-                                {isPreviewOpen
-                                  ? 'Tutup Pratinjau PDF'
-                                  : 'Pratinjau PDF'}
-                              </span>
+                              <span>{item.isActive ? 'Tampil' : 'Sembunyi'}</span>
                             </button>
-                          )}
 
-                          {resolvedPreview.hasSource && (
+                            <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer transition-colors">
+                              <Icon
+                                icon="mdi:upload-outline"
+                                className="w-3.5 h-3.5 text-[#F4D993]"
+                              />
+                              <span>
+                                {isUploadingThis ? 'Mengunggah...' : 'Unggah PDF'}
+                              </span>
+                              <input
+                                type="file"
+                                accept="application/pdf"
+                                disabled={isUploadingThis}
+                                onChange={(e) => void handleUploadTarifPdf(item.id, e)}
+                                className="hidden"
+                              />
+                            </label>
+
+                            {resolvedPreview.hasSource && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPreviewTarifPdfId(isPreviewOpen ? null : item.id)
+                                }
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white hover:bg-[#EAE3D2] text-[#164234] border border-[#C9A45A]/40 text-xs cursor-pointer transition-colors"
+                              >
+                                <Icon
+                                  icon={
+                                    isPreviewOpen
+                                      ? 'mdi:eye-off-outline'
+                                      : 'mdi:eye-outline'
+                                  }
+                                  className="w-3.5 h-3.5"
+                                />
+                                <span>
+                                  {isPreviewOpen ? 'Tutup Pratinjau' : 'Pratinjau PDF'}
+                                </span>
+                              </button>
+                            )}
+
+                            {!isConfirmDel ? (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteTarifId(item.id)}
+                                className="inline-flex items-center gap-1 px-3.5 py-2 rounded-full bg-[#9b2c2c]/10 hover:bg-[#9b2c2c]/20 text-[#9b2c2c] text-xs cursor-pointer"
+                              >
+                                <Icon icon="mdi:trash-can-outline" className="w-3.5 h-3.5" />
+                                <span>Hapus</span>
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-1.5 bg-white border border-[#9b2c2c]/35 rounded-full px-3 py-1">
+                                <button
+                                  type="button"
+                                  disabled={deletingTarifId === item.id}
+                                  onClick={() => void handleDeleteTarifItem(item.id)}
+                                  className="px-2.5 py-0.5 rounded-full bg-[#9b2c2c] text-white text-[11px] cursor-pointer"
+                                >
+                                  {deletingTarifId === item.id
+                                    ? 'Menghapus...'
+                                    : 'Ya, Hapus'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteTarifId(null)}
+                                  className="px-2 py-0.5 text-[11px] text-[#164234] cursor-pointer"
+                                >
+                                  Batal
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-[#3E544B]">
+                              Nama di Dropdown Menu (Navbar)
+                            </label>
+                            <input
+                              type="text"
+                              value={draft.navLabel}
+                              onChange={(e) =>
+                                updateTarifDraft(item.id, { navLabel: e.target.value })
+                              }
+                              className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-[#3E544B]">
+                              Label Tab Ringkas &amp; Slug URL
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                value={draft.shortLabel}
+                                onChange={(e) =>
+                                  updateTarifDraft(item.id, {
+                                    shortLabel: e.target.value,
+                                  })
+                                }
+                                placeholder="Label Tab"
+                                className="px-3.5 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                              />
+                              <input
+                                type="text"
+                                value={draft.slug}
+                                onChange={(e) =>
+                                  updateTarifDraft(item.id, { slug: e.target.value })
+                                }
+                                placeholder="slug-url"
+                                className="px-3.5 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="md:col-span-2 flex flex-col gap-1.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <label className="text-xs text-[#3E544B]">
+                                Tautan File PDF atau Google Drive ({draft.shortLabel})
+                              </label>
+                              <div className="flex flex-wrap items-center gap-3">
+                                {item.slug === 'penunjang-akademik' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateTarifDraft(item.id, {
+                                          pdfUrl: DEFAULT_TARIF_PENUNJANG_DRIVE_URL,
+                                        })
+                                      }
+                                      className="text-xs text-[#164234] hover:text-[#8F6D26] underline underline-offset-4 cursor-pointer bg-transparent border-0 p-0"
+                                    >
+                                      Pakai Google Drive Bawaan
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateTarifDraft(item.id, {
+                                          pdfUrl: DEFAULT_TARIF_PENUNJANG_LOCAL_PDF,
+                                        })
+                                      }
+                                      className="text-xs text-[#164234] hover:text-[#8F6D26] underline underline-offset-4 cursor-pointer bg-transparent border-0 p-0"
+                                    >
+                                      Pakai SK 29/2024 Lokal
+                                    </button>
+                                  </>
+                                )}
+                                {draft.pdfUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateTarifDraft(item.id, { pdfUrl: '' })
+                                    }
+                                    className="text-xs text-[#9b2c2c] hover:underline cursor-pointer bg-transparent border-0 p-0"
+                                  >
+                                    Kosongkan
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <input
+                              type="text"
+                              value={draft.pdfUrl}
+                              onChange={(e) =>
+                                updateTarifDraft(item.id, { pdfUrl: e.target.value })
+                              }
+                              placeholder="Masukkan /api/media/... atau tautan Google Drive / https://...pdf"
+                              className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-xs sm:text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                            />
+
+                            {pdfMediaOptions.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <span className="text-[11px] text-[#3E544B]">
+                                  Pilih PDF dari Pustaka Media:
+                                </span>
+                                {pdfMediaOptions.slice(0, 8).map((pdfItem) => (
+                                  <button
+                                    key={`${item.id}-media-${pdfItem.id}`}
+                                    type="button"
+                                    onClick={() => {
+                                      updateTarifDraft(item.id, { pdfUrl: pdfItem.url });
+                                      setPreviewTarifPdfId(item.id);
+                                    }}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] border transition-colors cursor-pointer ${
+                                      draft.pdfUrl === pdfItem.url
+                                        ? 'bg-[#164234] text-[#F6F3EC] border-[#164234]'
+                                        : 'bg-white text-[#164234] border-[#C9A45A]/35 hover:border-[#164234]'
+                                    }`}
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    <span className="max-w-[180px] truncate">
+                                      {pdfItem.originalName}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-[#3E544B]">
+                              Nomor Dokumen / Surat Keputusan
+                            </label>
+                            <input
+                              type="text"
+                              value={draft.docNumber}
+                              onChange={(e) =>
+                                updateTarifDraft(item.id, { docNumber: e.target.value })
+                              }
+                              className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-[#3E544B]">
+                              Judul Dokumen Tarif
+                            </label>
+                            <input
+                              type="text"
+                              value={draft.title}
+                              onChange={(e) =>
+                                updateTarifDraft(item.id, { title: e.target.value })
+                              }
+                              className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2 flex flex-col gap-1.5">
+                            <label className="text-xs text-[#3E544B]">
+                              Deskripsi Ringkas Dokumen Tarif
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={draft.description}
+                              onChange={(e) =>
+                                updateTarifDraft(item.id, {
+                                  description: e.target.value,
+                                })
+                              }
+                              className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                          {resolvedPreview.hasSource ? (
                             <a
                               href={resolvedPreview.openUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/40 text-xs transition-colors"
+                              className="inline-flex items-center gap-1.5 text-xs text-[#164234] hover:text-[#8F6D26] underline underline-offset-4"
                             >
                               <Icon icon="mdi:open-in-new" className="w-3.5 h-3.5" />
-                              <span>Buka Sumber</span>
+                              <span>Buka Sumber PDF di Tab Baru</span>
                             </a>
+                          ) : (
+                            <span className="text-xs text-[#3E544B]/80">
+                              Belum ada file PDF tertaut.
+                            </span>
                           )}
+
+                          <button
+                            type="button"
+                            disabled={isSavingThis || isUploadingThis}
+                            onClick={() => void handleSaveTarifItem(item.id)}
+                            className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] text-xs cursor-pointer"
+                          >
+                            <Icon icon="mdi:check" className="w-4 h-4 text-[#F4D993]" />
+                            <span>
+                              {isSavingThis
+                                ? 'Menyimpan...'
+                                : `Simpan Tarif "${draft.shortLabel}"`}
+                            </span>
+                          </button>
                         </div>
-                      </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="md:col-span-2 flex flex-col gap-1.5">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <label className="text-xs text-[#3E544B]">
-                              Tautan File PDF atau Google Drive ({category.shortLabel})
-                            </label>
-                            <div className="flex flex-wrap items-center gap-3">
-                              {category.slug === 'penunjang-akademik' && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      updateSettingField(
-                                        category.settingKeys.pdfUrl,
-                                        DEFAULT_TARIF_PENUNJANG_DRIVE_URL
-                                      )
-                                    }
-                                    className="text-xs text-[#164234] hover:text-[#8F6D26] underline underline-offset-4 cursor-pointer bg-transparent border-0 p-0"
-                                  >
-                                    Pakai Google Drive Bawaan
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      updateSettingField(
-                                        category.settingKeys.pdfUrl,
-                                        DEFAULT_TARIF_PENUNJANG_LOCAL_PDF
-                                      )
-                                    }
-                                    className="text-xs text-[#164234] hover:text-[#8F6D26] underline underline-offset-4 cursor-pointer bg-transparent border-0 p-0"
-                                  >
-                                    Pakai SK 29/2024 Lokal
-                                  </button>
-                                </>
-                              )}
-                              {rawPdfVal && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    updateSettingField(
-                                      category.settingKeys.pdfUrl,
-                                      ''
-                                    )
-                                  }
-                                  className="text-xs text-[#9b2c2c] hover:underline cursor-pointer bg-transparent border-0 p-0"
-                                >
-                                  Kosongkan
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          <input
-                            type="text"
-                            value={rawPdfVal}
-                            onChange={(e) =>
-                              updateSettingField(
-                                category.settingKeys.pdfUrl,
-                                e.target.value
-                              )
-                            }
-                            placeholder={
-                              category.defaultPdfUrl ||
-                              'Masukkan /api/media/... atau tautan Google Drive / https://...pdf'
-                            }
-                            className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-xs sm:text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                          />
-
-                          {pdfMediaOptions.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-2 pt-1">
-                              <span className="text-[11px] text-[#3E544B]">
-                                Pilih PDF dari Pustaka Media:
+                        {isPreviewOpen && resolvedPreview.hasSource && (
+                          <div className="rounded-2xl overflow-hidden border border-[#C9A45A]/35 bg-[#EAE5D7]">
+                            <div className="px-4 py-2.5 bg-[#164234] text-[#FAF8F3] text-xs flex items-center justify-between gap-3">
+                              <span className="truncate">
+                                Pratinjau PDF Viewer · {draft.navLabel}
                               </span>
-                              {pdfMediaOptions.slice(0, 8).map((pdfItem) => (
-                                <button
-                                  key={`${category.slug}-media-${pdfItem.id}`}
-                                  type="button"
-                                  onClick={() => {
-                                    updateSettingField(
-                                      category.settingKeys.pdfUrl,
-                                      pdfItem.url
-                                    );
-                                    setPreviewTarifPdfSlug(category.slug);
-                                  }}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] border transition-colors cursor-pointer ${
-                                    rawPdfVal === pdfItem.url
-                                      ? 'bg-[#164234] text-[#F6F3EC] border-[#164234]'
-                                      : 'bg-white text-[#164234] border-[#C9A45A]/35 hover:border-[#164234]'
-                                  }`}
-                                >
-                                  <FileText className="w-3 h-3" />
-                                  <span className="max-w-[180px] truncate">
-                                    {pdfItem.originalName}
-                                  </span>
-                                </button>
-                              ))}
+                              <span className="text-[#F4D993] shrink-0">
+                                {resolvedPreview.isGoogleDrive
+                                  ? 'Mode Embed Google Drive'
+                                  : 'Dokumen PDF Langsung'}
+                              </span>
                             </div>
-                          )}
-                        </div>
-
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-xs text-[#3E544B]">
-                            Nomor Dokumen / Surat Keputusan
-                          </label>
-                          <input
-                            type="text"
-                            value={settingsForm[category.settingKeys.docNumber] || ''}
-                            onChange={(e) =>
-                              updateSettingField(
-                                category.settingKeys.docNumber,
-                                e.target.value
-                              )
-                            }
-                            placeholder={category.defaultDocNumber}
-                            className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                          />
-                        </div>
-
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-xs text-[#3E544B]">
-                            Judul Dokumen Tarif
-                          </label>
-                          <input
-                            type="text"
-                            value={settingsForm[category.settingKeys.title] || ''}
-                            onChange={(e) =>
-                              updateSettingField(
-                                category.settingKeys.title,
-                                e.target.value
-                              )
-                            }
-                            placeholder={category.defaultTitle}
-                            className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                          />
-                        </div>
-
-                        <div className="md:col-span-2 flex flex-col gap-1.5">
-                          <label className="text-xs text-[#3E544B]">
-                            Deskripsi Ringkas Dokumen Tarif
-                          </label>
-                          <textarea
-                            rows={2}
-                            value={settingsForm[category.settingKeys.description] || ''}
-                            onChange={(e) =>
-                              updateSettingField(
-                                category.settingKeys.description,
-                                e.target.value
-                              )
-                            }
-                            placeholder={category.defaultDescription}
-                            className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
-                          />
-                        </div>
-                      </div>
-
-                      {isPreviewOpen && resolvedPreview.hasSource && (
-                        <div className="rounded-2xl overflow-hidden border border-[#C9A45A]/35 bg-[#EAE5D7]">
-                          <div className="px-4 py-2.5 bg-[#164234] text-[#FAF8F3] text-xs flex items-center justify-between gap-3">
-                            <span className="truncate">
-                              Pratinjau PDF Viewer · {category.navLabel}
-                            </span>
-                            <span className="text-[#F4D993] shrink-0">
-                              {resolvedPreview.isGoogleDrive
-                                ? 'Mode Embed Google Drive'
-                                : 'Dokumen PDF Langsung'}
-                            </span>
+                            <iframe
+                              title={`Pratinjau PDF ${draft.navLabel}`}
+                              src={resolvedPreview.embedUrl}
+                              className="w-full h-[440px] bg-white border-0"
+                              loading="lazy"
+                              allow="autoplay"
+                            />
                           </div>
-                          <iframe
-                            title={`Pratinjau PDF ${category.navLabel}`}
-                            src={resolvedPreview.embedUrl}
-                            className="w-full h-[460px] bg-white border-0"
-                            loading="lazy"
-                            allow="autoplay"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </form>
+          </div>
         )}
 
         {activeTab === 'magang' && (
@@ -5587,16 +6257,23 @@ export function CmsDashboard({
           </form>
         )}
 
+        {activeTab === 'users' && hasCmsPermission(user.role, 'users') && (
+          <CmsUsersPanel currentUser={user} onNotify={notify} />
+        )}
+
         {activeTab === 'security' && (
           <form
             onSubmit={handlePasswordChange}
             className="max-w-lg rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 p-6 sm:p-8 flex flex-col gap-4"
           >
+            <span className="text-xs uppercase tracking-[0.14em] text-[#8F6D26]">
+              Profil: {user.roleLabel || roleMeta.label}
+            </span>
             <h2 className="text-2xl font-normal text-[#164234]">
               Ubah Password Akun CMS
             </h2>
             <p className="text-xs sm:text-sm text-[#3E544B]">
-              Disarankan mengganti password default secara berkala demi keamanan panel CMS.
+              Disarankan mengganti password secara berkala demi keamanan akun {user.displayName}.
             </p>
 
             <input

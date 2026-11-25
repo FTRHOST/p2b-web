@@ -3,9 +3,13 @@ import { PartnerLogoItem } from '../types/cms';
 
 interface LogoMarqueeSectionProps {
   logos: PartnerLogoItem[];
+  ariaLabel?: string;
 }
 
-export function LogoMarqueeSection({ logos }: LogoMarqueeSectionProps) {
+export function LogoMarqueeSection({
+  logos,
+  ariaLabel = 'Logo Mitra & Unit P2B UIN Salatiga',
+}: LogoMarqueeSectionProps) {
   const [failedIds, setFailedIds] = useState<Record<number, boolean>>({});
 
   const visibleLogos = useMemo(
@@ -93,7 +97,7 @@ export function LogoMarqueeSection({ logos }: LogoMarqueeSectionProps) {
 
   return (
     <section
-      aria-label="Logo Mitra & Unit P2B UIN Salatiga"
+      aria-label={ariaLabel}
       className="w-full bg-[#F6F3EC] px-3 md:px-5 pt-3 pb-6 md:pt-4 md:pb-8 flex justify-center"
     >
       <div className="w-full max-w-[1536px] border-b border-[#C9A45A]/20 pb-6 md:pb-8">
