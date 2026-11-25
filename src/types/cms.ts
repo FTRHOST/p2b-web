@@ -11,6 +11,34 @@ export interface SiteSettings {
   contact_whatsapp?: string;
   contact_email?: string;
   location_address?: string;
+  page_kerjasama_eyebrow?: string;
+  page_kerjasama_title?: string;
+  page_kerjasama_subtitle?: string;
+  page_kerjasama_image?: string;
+  page_kerjasama_corner_label?: string;
+  page_kerjasama_corner_action?: string;
+  kerjasama_csv_url?: string;
+  kerjasama_sheet_label?: string;
+  kerjasama_section_heading?: string;
+  kerjasama_section_subtitle?: string;
+  page_tarif_eyebrow?: string;
+  page_tarif_title?: string;
+  page_tarif_subtitle?: string;
+  page_tarif_image?: string;
+  page_tarif_corner_label?: string;
+  page_tarif_corner_action?: string;
+  tarif_penunjang_pdf_url?: string;
+  tarif_penunjang_title?: string;
+  tarif_penunjang_doc_number?: string;
+  tarif_penunjang_description?: string;
+  tarif_klinik_pdf_url?: string;
+  tarif_klinik_title?: string;
+  tarif_klinik_doc_number?: string;
+  tarif_klinik_description?: string;
+  tarif_jurnal_pdf_url?: string;
+  tarif_jurnal_title?: string;
+  tarif_jurnal_doc_number?: string;
+  tarif_jurnal_description?: string;
   [key: string]: string | undefined;
 }
 
@@ -133,3 +161,25 @@ export interface MagangApplicationItem {
   status: MagangApplicationStatus;
   createdAt: string;
 }
+
+export interface KerjasamaItem {
+  rowIndex: number;
+  no: string;
+  namaPenyewa: string;
+  tanggalMulai: string;
+  tanggalSelesai: string;
+  perihal: string;
+  jenis: string;
+  berkasUrl: string;
+}
+
+export interface KerjasamaDataset {
+  ok: boolean;
+  title: string;
+  sheetLabel: string;
+  csvUrl: string;
+  fetchedAt: string;
+  items: KerjasamaItem[];
+  message?: string;
+}
+

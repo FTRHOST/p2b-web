@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '@iconify/react';
+import { FileText, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   CmsDatabaseInfo,
@@ -8,6 +9,7 @@ import {
   CmsStats,
   CmsUploadedMedia,
   CmsUser,
+  KerjasamaDataset,
   MagangApplicationItem,
   MagangApplicationStatus,
   MagangGalleryItem,
@@ -23,6 +25,32 @@ import {
   NewsGalleryItem,
 } from '../data/news';
 import { DEFAULT_MAGANG_HERO_IMAGE } from '../data/magangDefaults';
+import {
+  DEFAULT_KERJASAMA_CORNER_ACTION,
+  DEFAULT_KERJASAMA_CORNER_LABEL,
+  DEFAULT_KERJASAMA_CSV_URL,
+  DEFAULT_KERJASAMA_EYEBROW,
+  DEFAULT_KERJASAMA_HERO_IMAGE,
+  DEFAULT_KERJASAMA_SECTION_HEADING,
+  DEFAULT_KERJASAMA_SECTION_SUBTITLE,
+  DEFAULT_KERJASAMA_SHEET_LABEL,
+  DEFAULT_KERJASAMA_SUBTITLE,
+  DEFAULT_KERJASAMA_TITLE,
+  isSafeHttpUrl,
+} from '../data/kerjasamaDefaults';
+import {
+  DEFAULT_TARIF_CORNER_ACTION,
+  DEFAULT_TARIF_CORNER_LABEL,
+  DEFAULT_TARIF_EYEBROW,
+  DEFAULT_TARIF_HERO_IMAGE,
+  DEFAULT_TARIF_PENUNJANG_DRIVE_URL,
+  DEFAULT_TARIF_PENUNJANG_LOCAL_PDF,
+  DEFAULT_TARIF_SUBTITLE,
+  DEFAULT_TARIF_TITLE,
+  TARIF_CATEGORIES,
+  TarifCategorySlug,
+  resolvePdfSource,
+} from '../data/tarifDefaults';
 import { TinyMceEditor } from './TinyMceEditor';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
@@ -79,6 +107,8 @@ type CmsTab =
   | 'news'
   | 'media'
   | 'logos'
+  | 'kerjasama'
+  | 'tarif'
   | 'magang'
   | 'settings'
   | 'security';
@@ -239,7 +269,18 @@ export function CmsDashboard({
   const [savingSettings, setSavingSettings] = useState(false);
   const [uploadingHeroBg, setUploadingHeroBg] = useState(false);
   const [uploadingMagangHero, setUploadingMagangHero] = useState(false);
+  const [uploadingKerjasamaHero, setUploadingKerjasamaHero] = useState(false);
+  const [uploadingTarifHero, setUploadingTarifHero] = useState(false);
+  const [uploadingTarifPdfSlug, setUploadingTarifPdfSlug] =
+    useState<TarifCategorySlug | null>(null);
+  const [previewTarifPdfSlug, setPreviewTarifPdfSlug] =
+    useState<TarifCategorySlug | null>('penunjang-akademik');
   const [settingsError, setSettingsError] = useState('');
+
+  // Kerjasama Google Sheets CSV Preview State
+  const [kerjasamaPreview, setKerjasamaPreview] = useState<KerjasamaDataset | null>(null);
+  const [loadingKerjasamaPreview, setLoadingKerjasamaPreview] = useState(false);
+  const [kerjasamaPreviewError, setKerjasamaPreviewError] = useState('');
 
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -1912,6 +1953,132 @@ export function CmsDashboard({
     }
   };
 
+  const handleUploadKerjasamaHeroImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingKerjasamaHero(true);
+    setSettingsError('');
+    try {
+      markLocalCommit();
+      const media = await uploadSingleMedia(file);
+      updateSettingField('page_kerjasama_image', media.url);
+      await loadAllCmsData({ preserveDirtyEdits: true });
+      notify('Gambar hero halaman Kerjasama berhasil diunggah ke pustaka media.');
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : 'Gagal mengunggah gambar hero kerjasama.'
+      );
+    } finally {
+      setUploadingKerjasamaHero(false);
+    }
+  };
+
+  const handleUploadTarifHeroImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingTarifHero(true);
+    setSettingsError('');
+    try {
+      markLocalCommit();
+      const media = await uploadSingleMedia(file);
+      updateSettingField('page_tarif_image', media.url);
+      await loadAllCmsData({ preserveDirtyEdits: true });
+      notify('Gambar hero halaman Tarif Layanan berhasil diunggah ke pustaka media.');
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : 'Gagal mengunggah gambar hero tarif layanan.'
+      );
+    } finally {
+      setUploadingTarifHero(false);
+    }
+  };
+
+  const handleUploadTarifCategoryPdf = async (
+    slug: TarifCategorySlug,
+    settingKey:
+      | 'tarif_penunjang_pdf_url'
+      | 'tarif_klinik_pdf_url'
+      | 'tarif_jurnal_pdf_url',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingTarifPdfSlug(slug);
+    setSettingsError('');
+    try {
+      markLocalCommit();
+      const media = await uploadSingleMedia(file);
+      updateSettingField(settingKey, media.url);
+      setPreviewTarifPdfSlug(slug);
+      await loadAllCmsData({ preserveDirtyEdits: true });
+      notify(`Dokumen PDF "${file.name}" berhasil diunggah dan ditautkan.`);
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : 'Gagal mengunggah dokumen PDF tarif layanan.'
+      );
+    } finally {
+      setUploadingTarifPdfSlug(null);
+    }
+  };
+
+  const handlePreviewKerjasamaCsv = useCallback(
+    async (explicitUrl?: string) => {
+      const targetUrl = (
+        explicitUrl ??
+        settingsForm.kerjasama_csv_url?.trim() ??
+        ''
+      ).trim() || DEFAULT_KERJASAMA_CSV_URL;
+
+      setLoadingKerjasamaPreview(true);
+      setKerjasamaPreviewError('');
+      try {
+        const res = await fetch('/api/cms/kerjasama/preview', {
+          method: 'POST',
+          headers: authHeaders(),
+          credentials: 'include',
+          body: JSON.stringify({ csvUrl: targetUrl }),
+        });
+        const data = (await res.json().catch(() => ({}))) as Partial<KerjasamaDataset>;
+        if (!res.ok || !data.ok) {
+          setKerjasamaPreviewError(
+            data.message || 'Gagal memuat pratinjau CSV Google Sheets.'
+          );
+          return;
+        }
+        setKerjasamaPreview({
+          ok: true,
+          title: data.title || 'Daftar Kerjasama',
+          sheetLabel: data.sheetLabel || DEFAULT_KERJASAMA_SHEET_LABEL,
+          csvUrl: data.csvUrl || targetUrl,
+          fetchedAt: data.fetchedAt || new Date().toISOString(),
+          items: Array.isArray(data.items) ? data.items : [],
+        });
+      } catch {
+        setKerjasamaPreviewError('Tidak dapat terhubung ke server untuk pratinjau CSV.');
+      } finally {
+        setLoadingKerjasamaPreview(false);
+      }
+    },
+    [authHeaders, settingsForm.kerjasama_csv_url]
+  );
+
+  useEffect(() => {
+    if (activeTab === 'kerjasama' && !kerjasamaPreview && !loadingKerjasamaPreview) {
+      void handlePreviewKerjasamaCsv(
+        settingsForm.kerjasama_csv_url?.trim() || DEFAULT_KERJASAMA_CSV_URL
+      );
+    }
+  }, [
+    activeTab,
+    kerjasamaPreview,
+    loadingKerjasamaPreview,
+    handlePreviewKerjasamaCsv,
+    settingsForm.kerjasama_csv_url,
+  ]);
+
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingSettings(true);
@@ -2024,6 +2191,8 @@ export function CmsDashboard({
     { id: 'news', label: 'Kelola Berita', icon: 'mdi:newspaper-variant-outline' },
     { id: 'media', label: 'Kelola Media', icon: 'mdi:folder-open-outline' },
     { id: 'logos', label: 'Logo Mitra', icon: 'mdi:office-building-outline' },
+    { id: 'kerjasama', label: 'Kerjasama', icon: 'mdi:handshake-outline' },
+    { id: 'tarif', label: 'Tarif Layanan', icon: 'mdi:file-document-outline' },
     { id: 'magang', label: 'Magang P2B', icon: 'mdi:school-outline' },
     { id: 'settings', label: 'Pengaturan Situs', icon: 'mdi:compass-outline' },
     { id: 'security', label: 'Keamanan Akun', icon: 'mdi:lock-outline' },
@@ -3289,6 +3458,1045 @@ export function CmsDashboard({
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === 'kerjasama' && (
+          <div className="flex flex-col gap-6">
+            {/* Panel 0: Pengaturan Hero & Integrasi Google Sheets CSV Halaman Kerjasama */}
+            <form
+              onSubmit={handleSaveSettings}
+              className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/75 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#C9A45A]/20 pb-5">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Eksklusif Halaman /kerjasama · Sinkron Real-Time MariaDB &amp; Google Sheets
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-normal text-[#164234]">
+                    Hero &amp; Integrasi Google Sheets Kerjasama
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[#3E544B]">
+                    Atur gambar hero, teks tampilan, serta tautan Publish to Web (.csv) dari Google Sheets (mis. Sheet BPK). Kosongkan kolom tertentu untuk memakai nilai bawaan standar.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  {settingsDirty && (
+                    <button
+                      type="button"
+                      disabled={savingSettings}
+                      onClick={() => {
+                        setSettingsDirty(false);
+                        void loadAllCmsData();
+                      }}
+                      className="px-4 py-2.5 rounded-full bg-white hover:bg-[#F6F3EC] text-[#3E544B] border border-[#C9A45A]/35 text-xs sm:text-sm transition-colors cursor-pointer"
+                    >
+                      Batalkan
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={savingSettings || uploadingKerjasamaHero}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Icon icon="mdi:check" className="w-4 h-4 text-[#F4D993]" />
+                    <span>
+                      {savingSettings ? 'Menyimpan...' : 'Simpan Pengaturan Kerjasama'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {settingsError && (
+                <div
+                  role="alert"
+                  className="px-4 py-3 rounded-2xl bg-[#9b2c2c]/10 border border-[#9b2c2c]/25 text-xs sm:text-sm text-[#9b2c2c]"
+                >
+                  {settingsError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Left Column: Hero Image Upload, Reset & Quick Media Picker */}
+                <div className="lg:col-span-5 flex flex-col gap-3">
+                  <div className="aspect-[16/9] rounded-2xl overflow-hidden border border-[#C9A45A]/30 bg-[#EAE5D7]">
+                    <img
+                      src={
+                        settingsForm.page_kerjasama_image?.trim() ||
+                        DEFAULT_KERJASAMA_HERO_IMAGE
+                      }
+                      alt="Pratinjau Gambar Hero Halaman Kerjasama"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer transition-colors">
+                      <Icon
+                        icon="mdi:upload-outline"
+                        className="w-3.5 h-3.5 text-[#F4D993]"
+                      />
+                      <span>
+                        {uploadingKerjasamaHero
+                          ? 'Mengunggah...'
+                          : 'Unggah Gambar Hero'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingKerjasamaHero}
+                        onChange={(e) => void handleUploadKerjasamaHeroImage(e)}
+                        className="hidden"
+                      />
+                    </label>
+                    {settingsForm.page_kerjasama_image && (
+                      <button
+                        type="button"
+                        onClick={() => updateSettingField('page_kerjasama_image', '')}
+                        className="px-3.5 py-2 rounded-full bg-[#F6F3EC] hover:bg-[#EAE3D2] text-[#9b2c2c] text-xs cursor-pointer transition-colors"
+                      >
+                        Reset ke Bawaan
+                      </button>
+                    )}
+                  </div>
+
+                  <input
+                    type="text"
+                    value={settingsForm.page_kerjasama_image || ''}
+                    onChange={(e) =>
+                      updateSettingField('page_kerjasama_image', e.target.value)
+                    }
+                    placeholder="Kosongkan untuk default atau masukkan /api/media/... / https://..."
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-xs sm:text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+
+                  {mediaItems.some((m) => m.mimeType.startsWith('image/')) && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs text-[#3E544B]">
+                        Pilih cepat gambar hero dari Pustaka Media:
+                      </span>
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                        {mediaItems
+                          .filter((m) => m.mimeType.startsWith('image/'))
+                          .slice(0, 12)
+                          .map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() =>
+                                updateSettingField('page_kerjasama_image', m.url)
+                              }
+                              title={m.originalName}
+                              className={`w-16 h-12 rounded-xl bg-white border overflow-hidden shrink-0 flex items-center justify-center cursor-pointer transition-colors ${
+                                settingsForm.page_kerjasama_image === m.url
+                                  ? 'border-[#164234] ring-2 ring-[#164234]/20'
+                                  : 'border-[#C9A45A]/25 hover:border-[#164234]/60'
+                              }`}
+                            >
+                              <img
+                                src={m.url}
+                                alt={m.originalName}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column: Hero Text Fields & Google Sheets CSV Config */}
+                <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Label Atas Hero (Eyebrow)
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.page_kerjasama_eyebrow || ''}
+                      onChange={(e) =>
+                        updateSettingField('page_kerjasama_eyebrow', e.target.value)
+                      }
+                      placeholder={DEFAULT_KERJASAMA_EYEBROW}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Judul Utama Hero
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.page_kerjasama_title || ''}
+                      onChange={(e) =>
+                        updateSettingField('page_kerjasama_title', e.target.value)
+                      }
+                      placeholder={DEFAULT_KERJASAMA_TITLE}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Subjudul / Deskripsi Hero Kerjasama
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={settingsForm.page_kerjasama_subtitle || ''}
+                      onChange={(e) =>
+                        updateSettingField('page_kerjasama_subtitle', e.target.value)
+                      }
+                      placeholder={DEFAULT_KERJASAMA_SUBTITLE}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Label Pojok Kanan Bawah Hero
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.page_kerjasama_corner_label || ''}
+                      onChange={(e) =>
+                        updateSettingField(
+                          'page_kerjasama_corner_label',
+                          e.target.value
+                        )
+                      }
+                      placeholder={DEFAULT_KERJASAMA_CORNER_LABEL}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Teks Tombol Pojok Kanan Bawah Hero
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.page_kerjasama_corner_action || ''}
+                      onChange={(e) =>
+                        updateSettingField(
+                          'page_kerjasama_corner_action',
+                          e.target.value
+                        )
+                      }
+                      placeholder={DEFAULT_KERJASAMA_CORNER_ACTION}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  {/* Google Sheets CSV Integration Box */}
+                  <div className="sm:col-span-2 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/35 p-4 flex flex-col gap-3 mt-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                        Sumber Data Google Sheets (Publish to Web · CSV)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateSettingField(
+                            'kerjasama_csv_url',
+                            DEFAULT_KERJASAMA_CSV_URL
+                          );
+                          updateSettingField(
+                            'kerjasama_sheet_label',
+                            DEFAULT_KERJASAMA_SHEET_LABEL
+                          );
+                          void handlePreviewKerjasamaCsv(DEFAULT_KERJASAMA_CSV_URL);
+                        }}
+                        className="text-xs text-[#164234] hover:text-[#8F6D26] underline underline-offset-4 cursor-pointer bg-transparent border-0 p-0"
+                      >
+                        Gunakan Link Sheet BPK Bawaan
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-[#3E544B]">
+                          Nama Sheet / Label Sumber
+                        </label>
+                        <input
+                          type="text"
+                          value={settingsForm.kerjasama_sheet_label || ''}
+                          onChange={(e) =>
+                            updateSettingField(
+                              'kerjasama_sheet_label',
+                              e.target.value
+                            )
+                          }
+                          placeholder={DEFAULT_KERJASAMA_SHEET_LABEL}
+                          className="px-3.5 py-2 rounded-xl bg-white border border-[#C9A45A]/30 text-xs sm:text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2 flex flex-col gap-1">
+                        <label className="text-xs text-[#3E544B]">
+                          Tautan Publish to Web (.csv)
+                        </label>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            type="url"
+                            value={settingsForm.kerjasama_csv_url || ''}
+                            onChange={(e) =>
+                              updateSettingField('kerjasama_csv_url', e.target.value)
+                            }
+                            placeholder={DEFAULT_KERJASAMA_CSV_URL}
+                            className="flex-1 px-3.5 py-2 rounded-xl bg-white border border-[#C9A45A]/30 text-xs text-[#164234] focus:outline-none focus:border-[#164234]"
+                          />
+                          <button
+                            type="button"
+                            disabled={loadingKerjasamaPreview}
+                            onClick={() => void handlePreviewKerjasamaCsv()}
+                            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] text-xs transition-colors cursor-pointer whitespace-nowrap"
+                          >
+                            <RefreshCw
+                              className={`w-3.5 h-3.5 text-[#F4D993] ${
+                                loadingKerjasamaPreview ? 'animate-spin' : ''
+                              }`}
+                            />
+                            <span>
+                              {loadingKerjasamaPreview
+                                ? 'Memuat...'
+                                : 'Uji & Muat Pratinjau'}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-[#3E544B] leading-relaxed">
+                      Dari Google Sheets: pilih <strong>File → Share → Publish to web</strong>, pilih sheet target (mis. <strong>BPK</strong>), pilih format <strong>Comma-separated values (.csv)</strong>, lalu tempel tautannya di atas. Kolom yang dipetakan otomatis: <em>Nama Penyewa</em>, <em>Masa Sewa/Kerjasama (Mulai &amp; Selesai)</em>, <em>Perihal</em>, <em>Jenis</em>, dan <em>Berkas</em> (tautan dijadikan ikon berkas yang dapat diklik).
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Judul Seksi Daftar Kerjasama
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.kerjasama_section_heading || ''}
+                      onChange={(e) =>
+                        updateSettingField(
+                          'kerjasama_section_heading',
+                          e.target.value
+                        )
+                      }
+                      placeholder={DEFAULT_KERJASAMA_SECTION_HEADING}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Deskripsi Seksi Daftar Kerjasama
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.kerjasama_section_subtitle || ''}
+                      onChange={(e) =>
+                        updateSettingField(
+                          'kerjasama_section_subtitle',
+                          e.target.value
+                        )
+                      }
+                      placeholder={DEFAULT_KERJASAMA_SECTION_SUBTITLE}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </form>
+
+            {/* Panel 1: Pratinjau Data Terbaca dari Google Sheets CSV */}
+            <div className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/65 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26] tabular-nums">
+                    Pratinjau Parsing CSV ·{' '}
+                    {kerjasamaPreview ? `${kerjasamaPreview.items.length} Baris Data` : 'Memeriksa...'}
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-normal text-[#164234]">
+                    {kerjasamaPreview?.title || 'Pratinjau Tabel Sheet BPK'}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#3E544B]">
+                    Verifikasi kolom <strong>Nama Penyewa</strong>, <strong>Mulai</strong>, <strong>Selesai</strong>, <strong>Perihal</strong>, <strong>Jenis</strong>, serta ikon tautan <strong>Berkas</strong> sebelum atau sesudah disimpan.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={loadingKerjasamaPreview}
+                  onClick={() => void handlePreviewKerjasamaCsv()}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/40 text-xs sm:text-sm transition-colors cursor-pointer disabled:opacity-60 whitespace-nowrap w-fit"
+                >
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 ${
+                      loadingKerjasamaPreview ? 'animate-spin' : ''
+                    }`}
+                  />
+                  <span>Muat Ulang Pratinjau</span>
+                </button>
+              </div>
+
+              {kerjasamaPreviewError && (
+                <div className="px-4 py-3 rounded-2xl bg-[#9b2c2c]/10 border border-[#9b2c2c]/25 text-xs sm:text-sm text-[#9b2c2c]">
+                  {kerjasamaPreviewError}
+                </div>
+              )}
+
+              {loadingKerjasamaPreview && !kerjasamaPreview ? (
+                <div className="rounded-2xl bg-white/75 border border-[#C9A45A]/25 p-8 text-center text-sm text-[#3E544B]">
+                  Mengambil &amp; memproses data CSV dari Google Sheets...
+                </div>
+              ) : kerjasamaPreview && kerjasamaPreview.items.length > 0 ? (
+                <div className="rounded-2xl bg-white border border-[#C9A45A]/30 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-[#164234] text-[#FAF8F3] text-xs uppercase tracking-wider">
+                          <th
+                            rowSpan={2}
+                            className="py-3 px-3.5 font-normal border-b border-r border-[#C9A45A]/25 text-center w-12"
+                          >
+                            No
+                          </th>
+                          <th
+                            rowSpan={2}
+                            className="py-3 px-3.5 font-normal border-b border-r border-[#C9A45A]/25"
+                          >
+                            Nama Penyewa
+                          </th>
+                          <th
+                            colSpan={2}
+                            className="py-2 px-3.5 font-normal border-b border-r border-[#C9A45A]/25 text-center"
+                          >
+                            Masa Sewa/Kerjasama
+                          </th>
+                          <th
+                            rowSpan={2}
+                            className="py-3 px-3.5 font-normal border-b border-r border-[#C9A45A]/25"
+                          >
+                            Perihal
+                          </th>
+                          <th
+                            rowSpan={2}
+                            className="py-3 px-3.5 font-normal border-b border-r border-[#C9A45A]/25"
+                          >
+                            Jenis
+                          </th>
+                          <th
+                            rowSpan={2}
+                            className="py-3 px-3.5 font-normal border-b border-[#C9A45A]/25 text-center w-20"
+                          >
+                            Berkas
+                          </th>
+                        </tr>
+                        <tr className="bg-[#0F3126] text-[#F4D993] text-[11px] uppercase tracking-wider">
+                          <th className="py-2 px-3.5 font-normal border-b border-r border-[#C9A45A]/25">
+                            Mulai
+                          </th>
+                          <th className="py-2 px-3.5 font-normal border-b border-r border-[#C9A45A]/25">
+                            Selesai
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#C9A45A]/20 text-xs sm:text-sm text-[#164234]">
+                        {kerjasamaPreview.items.map((item, idx) => (
+                          <tr
+                            key={`cms-ks-${item.rowIndex}-${idx}`}
+                            className="hover:bg-[#FAF8F3]"
+                          >
+                            <td className="py-3 px-3.5 text-center tabular-nums text-[#3E544B] border-r border-[#C9A45A]/15">
+                              {idx + 1}
+                            </td>
+                            <td className="py-3 px-3.5 font-medium border-r border-[#C9A45A]/15">
+                              {item.namaPenyewa}
+                            </td>
+                            <td className="py-3 px-3.5 tabular-nums text-[#3E544B] whitespace-nowrap border-r border-[#C9A45A]/15">
+                              {item.tanggalMulai || '—'}
+                            </td>
+                            <td className="py-3 px-3.5 tabular-nums text-[#3E544B] whitespace-nowrap border-r border-[#C9A45A]/15">
+                              {item.tanggalSelesai || '—'}
+                            </td>
+                            <td className="py-3 px-3.5 text-[#3E544B] border-r border-[#C9A45A]/15">
+                              {item.perihal || '—'}
+                            </td>
+                            <td className="py-3 px-3.5 text-xs uppercase text-[#8F6D26] whitespace-nowrap border-r border-[#C9A45A]/15">
+                              {item.jenis || '—'}
+                            </td>
+                            <td className="py-2.5 px-3.5 text-center">
+                              {isSafeHttpUrl(item.berkasUrl) ? (
+                                <a
+                                  href={item.berkasUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={`Buka berkas ${item.namaPenyewa}`}
+                                  aria-label={`Buka berkas ${item.namaPenyewa}`}
+                                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[#F6F3EC] hover:bg-[#164234] text-[#164234] hover:text-[#F4D993] border border-[#C9A45A]/40 transition-colors"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                </a>
+                              ) : (
+                                <span className="text-[#3E544B]/45">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-white/75 border border-[#C9A45A]/25 p-8 text-center text-sm text-[#3E544B]">
+                  Tidak ada baris data yang ditemukan pada tautan CSV ini.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'tarif' && (
+          <form onSubmit={handleSaveSettings} className="flex flex-col gap-6">
+            {/* Panel 0: Hero Halaman Tarif Layanan */}
+            <div className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/75 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#C9A45A]/20 pb-5">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Eksklusif Halaman /tarif-layanan · Sinkron Real-Time MariaDB
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-normal text-[#164234]">
+                    Hero &amp; Dokumen PDF Tarif Layanan
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[#3E544B]">
+                    Atur gambar hero halaman Tarif Layanan serta unggah berkas PDF atau tautan Google Drive untuk setiap kategori layanan yang ditampilkan di PDF Viewer publik.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  {settingsDirty && (
+                    <button
+                      type="button"
+                      disabled={savingSettings}
+                      onClick={() => {
+                        setSettingsDirty(false);
+                        void loadAllCmsData();
+                      }}
+                      className="px-4 py-2.5 rounded-full bg-white hover:bg-[#F6F3EC] text-[#3E544B] border border-[#C9A45A]/35 text-xs sm:text-sm transition-colors cursor-pointer"
+                    >
+                      Batalkan
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={
+                      savingSettings ||
+                      uploadingTarifHero ||
+                      uploadingTarifPdfSlug !== null
+                    }
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Icon icon="mdi:check" className="w-4 h-4 text-[#F4D993]" />
+                    <span>
+                      {savingSettings ? 'Menyimpan...' : 'Simpan Pengaturan Tarif'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {settingsError && (
+                <div
+                  role="alert"
+                  className="px-4 py-3 rounded-2xl bg-[#9b2c2c]/10 border border-[#9b2c2c]/25 text-xs sm:text-sm text-[#9b2c2c]"
+                >
+                  {settingsError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Left Column: Hero Image Upload, Reset & Quick Media Picker */}
+                <div className="lg:col-span-5 flex flex-col gap-3">
+                  <div className="aspect-[16/9] rounded-2xl overflow-hidden border border-[#C9A45A]/30 bg-[#EAE5D7]">
+                    <img
+                      src={
+                        settingsForm.page_tarif_image?.trim() ||
+                        DEFAULT_TARIF_HERO_IMAGE
+                      }
+                      alt="Pratinjau Gambar Hero Halaman Tarif Layanan"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer transition-colors">
+                      <Icon
+                        icon="mdi:upload-outline"
+                        className="w-3.5 h-3.5 text-[#F4D993]"
+                      />
+                      <span>
+                        {uploadingTarifHero ? 'Mengunggah...' : 'Unggah Gambar Hero'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingTarifHero}
+                        onChange={(e) => void handleUploadTarifHeroImage(e)}
+                        className="hidden"
+                      />
+                    </label>
+                    {settingsForm.page_tarif_image && (
+                      <button
+                        type="button"
+                        onClick={() => updateSettingField('page_tarif_image', '')}
+                        className="px-3.5 py-2 rounded-full bg-[#F6F3EC] hover:bg-[#EAE3D2] text-[#9b2c2c] text-xs cursor-pointer transition-colors"
+                      >
+                        Reset ke Bawaan
+                      </button>
+                    )}
+                  </div>
+
+                  <input
+                    type="text"
+                    value={settingsForm.page_tarif_image || ''}
+                    onChange={(e) =>
+                      updateSettingField('page_tarif_image', e.target.value)
+                    }
+                    placeholder="Kosongkan untuk default atau masukkan /api/media/... / https://..."
+                    className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-xs sm:text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                  />
+
+                  {mediaItems.some((m) => m.mimeType.startsWith('image/')) && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs text-[#3E544B]">
+                        Pilih cepat gambar hero dari Pustaka Media:
+                      </span>
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                        {mediaItems
+                          .filter((m) => m.mimeType.startsWith('image/'))
+                          .slice(0, 12)
+                          .map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() =>
+                                updateSettingField('page_tarif_image', m.url)
+                              }
+                              title={m.originalName}
+                              className={`w-16 h-12 rounded-xl bg-white border overflow-hidden shrink-0 flex items-center justify-center cursor-pointer transition-colors ${
+                                settingsForm.page_tarif_image === m.url
+                                  ? 'border-[#164234] ring-2 ring-[#164234]/20'
+                                  : 'border-[#C9A45A]/25 hover:border-[#164234]/60'
+                              }`}
+                            >
+                              <img
+                                src={m.url}
+                                alt={m.originalName}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column: Hero Text Fields */}
+                <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Label Atas Hero (Eyebrow)
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.page_tarif_eyebrow || ''}
+                      onChange={(e) =>
+                        updateSettingField('page_tarif_eyebrow', e.target.value)
+                      }
+                      placeholder={DEFAULT_TARIF_EYEBROW}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Judul Utama Hero
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.page_tarif_title || ''}
+                      onChange={(e) =>
+                        updateSettingField('page_tarif_title', e.target.value)
+                      }
+                      placeholder={DEFAULT_TARIF_TITLE}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Subjudul / Deskripsi Hero Tarif Layanan
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={settingsForm.page_tarif_subtitle || ''}
+                      onChange={(e) =>
+                        updateSettingField('page_tarif_subtitle', e.target.value)
+                      }
+                      placeholder={DEFAULT_TARIF_SUBTITLE}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Label Pojok Kanan Bawah Hero
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.page_tarif_corner_label || ''}
+                      onChange={(e) =>
+                        updateSettingField(
+                          'page_tarif_corner_label',
+                          e.target.value
+                        )
+                      }
+                      placeholder={DEFAULT_TARIF_CORNER_LABEL}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-[#3E544B]">
+                      Teks Tombol Pojok Kanan Bawah Hero
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.page_tarif_corner_action || ''}
+                      onChange={(e) =>
+                        updateSettingField(
+                          'page_tarif_corner_action',
+                          e.target.value
+                        )
+                      }
+                      placeholder={DEFAULT_TARIF_CORNER_ACTION}
+                      className="px-4 py-2.5 rounded-2xl bg-[#FAF8F3] border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel 1: Dokumen PDF per Kategori Tarif Layanan */}
+            <div className="rounded-[1.5rem] md:rounded-[2.5rem] bg-white/75 backdrop-blur-xl border border-[#C9A45A]/30 p-5 sm:p-8 flex flex-col gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#C9A45A]/20 pb-4">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-wider text-[#8F6D26]">
+                    Manajemen Berkas PDF Viewer · 3 Kategori Tarif Layanan
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-normal text-[#164234]">
+                    Konfigurasi Dokumen PDF per Kategori
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#3E544B]">
+                    Unggah file PDF langsung ke CMS atau masukkan tautan Google Drive (otomatis dikonversi menjadi PDF Viewer yang dapat dibaca dan diunduh pengunjung).
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={
+                    savingSettings ||
+                    uploadingTarifHero ||
+                    uploadingTarifPdfSlug !== null
+                  }
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#164234] hover:bg-[#1E5644] disabled:opacity-60 text-[#F6F3EC] text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap w-fit"
+                >
+                  <Icon icon="mdi:check" className="w-4 h-4 text-[#F4D993]" />
+                  <span>
+                    {savingSettings ? 'Menyimpan...' : 'Simpan Semua Perubahan'}
+                  </span>
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-6">
+                {TARIF_CATEGORIES.map((category, idx) => {
+                  const rawPdfVal = settingsForm[category.settingKeys.pdfUrl] || '';
+                  const effectiveRawPdf =
+                    rawPdfVal.trim() || category.defaultPdfUrl;
+                  const resolvedPreview = resolvePdfSource(effectiveRawPdf);
+                  const isPreviewOpen = previewTarifPdfSlug === category.slug;
+                  const isUploadingThis = uploadingTarifPdfSlug === category.slug;
+                  const pdfMediaOptions = mediaItems.filter(
+                    (m) => m.mimeType === 'application/pdf'
+                  );
+
+                  return (
+                    <div
+                      key={category.slug}
+                      className="rounded-3xl bg-[#FAF8F3] border border-[#C9A45A]/30 p-5 sm:p-6 flex flex-col gap-5"
+                    >
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#C9A45A]/20 pb-4">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs uppercase tracking-wider text-[#8F6D26] tabular-nums">
+                            Kategori 0{idx + 1} · /tarif-layanan/{category.slug}
+                          </span>
+                          <h4 className="text-lg sm:text-xl font-normal text-[#164234]">
+                            {category.navLabel}
+                          </h4>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#164234] hover:bg-[#1E5644] text-[#F6F3EC] text-xs cursor-pointer transition-colors">
+                            <Icon
+                              icon="mdi:upload-outline"
+                              className="w-3.5 h-3.5 text-[#F4D993]"
+                            />
+                            <span>
+                              {isUploadingThis
+                                ? 'Mengunggah PDF...'
+                                : 'Unggah File PDF'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="application/pdf"
+                              disabled={isUploadingThis}
+                              onChange={(e) =>
+                                void handleUploadTarifCategoryPdf(
+                                  category.slug,
+                                  category.settingKeys.pdfUrl,
+                                  e
+                                )
+                              }
+                              className="hidden"
+                            />
+                          </label>
+
+                          {resolvedPreview.hasSource && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreviewTarifPdfSlug(
+                                  isPreviewOpen ? null : category.slug
+                                )
+                              }
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white hover:bg-[#EAE3D2] text-[#164234] border border-[#C9A45A]/40 text-xs cursor-pointer transition-colors"
+                            >
+                              <Icon
+                                icon={
+                                  isPreviewOpen
+                                    ? 'mdi:eye-off-outline'
+                                    : 'mdi:eye-outline'
+                                }
+                                className="w-3.5 h-3.5"
+                              />
+                              <span>
+                                {isPreviewOpen
+                                  ? 'Tutup Pratinjau PDF'
+                                  : 'Pratinjau PDF'}
+                              </span>
+                            </button>
+                          )}
+
+                          {resolvedPreview.hasSource && (
+                            <a
+                              href={resolvedPreview.openUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white hover:bg-[#164234] text-[#164234] hover:text-[#F6F3EC] border border-[#C9A45A]/40 text-xs transition-colors"
+                            >
+                              <Icon icon="mdi:open-in-new" className="w-3.5 h-3.5" />
+                              <span>Buka Sumber</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="md:col-span-2 flex flex-col gap-1.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <label className="text-xs text-[#3E544B]">
+                              Tautan File PDF atau Google Drive ({category.shortLabel})
+                            </label>
+                            <div className="flex flex-wrap items-center gap-3">
+                              {category.slug === 'penunjang-akademik' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateSettingField(
+                                        category.settingKeys.pdfUrl,
+                                        DEFAULT_TARIF_PENUNJANG_DRIVE_URL
+                                      )
+                                    }
+                                    className="text-xs text-[#164234] hover:text-[#8F6D26] underline underline-offset-4 cursor-pointer bg-transparent border-0 p-0"
+                                  >
+                                    Pakai Google Drive Bawaan
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateSettingField(
+                                        category.settingKeys.pdfUrl,
+                                        DEFAULT_TARIF_PENUNJANG_LOCAL_PDF
+                                      )
+                                    }
+                                    className="text-xs text-[#164234] hover:text-[#8F6D26] underline underline-offset-4 cursor-pointer bg-transparent border-0 p-0"
+                                  >
+                                    Pakai SK 29/2024 Lokal
+                                  </button>
+                                </>
+                              )}
+                              {rawPdfVal && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateSettingField(
+                                      category.settingKeys.pdfUrl,
+                                      ''
+                                    )
+                                  }
+                                  className="text-xs text-[#9b2c2c] hover:underline cursor-pointer bg-transparent border-0 p-0"
+                                >
+                                  Kosongkan
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <input
+                            type="text"
+                            value={rawPdfVal}
+                            onChange={(e) =>
+                              updateSettingField(
+                                category.settingKeys.pdfUrl,
+                                e.target.value
+                              )
+                            }
+                            placeholder={
+                              category.defaultPdfUrl ||
+                              'Masukkan /api/media/... atau tautan Google Drive / https://...pdf'
+                            }
+                            className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-xs sm:text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                          />
+
+                          {pdfMediaOptions.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              <span className="text-[11px] text-[#3E544B]">
+                                Pilih PDF dari Pustaka Media:
+                              </span>
+                              {pdfMediaOptions.slice(0, 8).map((pdfItem) => (
+                                <button
+                                  key={`${category.slug}-media-${pdfItem.id}`}
+                                  type="button"
+                                  onClick={() => {
+                                    updateSettingField(
+                                      category.settingKeys.pdfUrl,
+                                      pdfItem.url
+                                    );
+                                    setPreviewTarifPdfSlug(category.slug);
+                                  }}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] border transition-colors cursor-pointer ${
+                                    rawPdfVal === pdfItem.url
+                                      ? 'bg-[#164234] text-[#F6F3EC] border-[#164234]'
+                                      : 'bg-white text-[#164234] border-[#C9A45A]/35 hover:border-[#164234]'
+                                  }`}
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  <span className="max-w-[180px] truncate">
+                                    {pdfItem.originalName}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs text-[#3E544B]">
+                            Nomor Dokumen / Surat Keputusan
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm[category.settingKeys.docNumber] || ''}
+                            onChange={(e) =>
+                              updateSettingField(
+                                category.settingKeys.docNumber,
+                                e.target.value
+                              )
+                            }
+                            placeholder={category.defaultDocNumber}
+                            className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs text-[#3E544B]">
+                            Judul Dokumen Tarif
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm[category.settingKeys.title] || ''}
+                            onChange={(e) =>
+                              updateSettingField(
+                                category.settingKeys.title,
+                                e.target.value
+                              )
+                            }
+                            placeholder={category.defaultTitle}
+                            className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                          />
+                        </div>
+
+                        <div className="md:col-span-2 flex flex-col gap-1.5">
+                          <label className="text-xs text-[#3E544B]">
+                            Deskripsi Ringkas Dokumen Tarif
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={settingsForm[category.settingKeys.description] || ''}
+                            onChange={(e) =>
+                              updateSettingField(
+                                category.settingKeys.description,
+                                e.target.value
+                              )
+                            }
+                            placeholder={category.defaultDescription}
+                            className="px-4 py-2.5 rounded-2xl bg-white border border-[#C9A45A]/30 text-sm text-[#164234] focus:outline-none focus:border-[#164234]"
+                          />
+                        </div>
+                      </div>
+
+                      {isPreviewOpen && resolvedPreview.hasSource && (
+                        <div className="rounded-2xl overflow-hidden border border-[#C9A45A]/35 bg-[#EAE5D7]">
+                          <div className="px-4 py-2.5 bg-[#164234] text-[#FAF8F3] text-xs flex items-center justify-between gap-3">
+                            <span className="truncate">
+                              Pratinjau PDF Viewer · {category.navLabel}
+                            </span>
+                            <span className="text-[#F4D993] shrink-0">
+                              {resolvedPreview.isGoogleDrive
+                                ? 'Mode Embed Google Drive'
+                                : 'Dokumen PDF Langsung'}
+                            </span>
+                          </div>
+                          <iframe
+                            title={`Pratinjau PDF ${category.navLabel}`}
+                            src={resolvedPreview.embedUrl}
+                            className="w-full h-[460px] bg-white border-0"
+                            loading="lazy"
+                            allow="autoplay"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </form>
         )}
 
         {activeTab === 'magang' && (

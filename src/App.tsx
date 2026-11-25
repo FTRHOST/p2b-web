@@ -21,6 +21,8 @@ import { VisiMisiPage } from './components/VisiMisiPage';
 import { StrukturOrganisasiPage } from './components/StrukturOrganisasiPage';
 import { MagangPage } from './components/MagangPage';
 import { MagangRegisterPage } from './components/MagangRegisterPage';
+import { KerjasamaPage } from './components/KerjasamaPage';
+import { TarifLayananPage } from './components/TarifLayananPage';
 import { NewsDetailPage } from './components/NewsDetailPage';
 import { CmsLoginPage } from './components/CmsLoginPage';
 import { CmsDashboard } from './components/CmsDashboard';
@@ -30,6 +32,11 @@ import {
   DEFAULT_MAGANG_GALLERY,
   DEFAULT_MAGANG_POSITIONS,
 } from './data/magangDefaults';
+import {
+  TarifCategorySlug,
+  getTarifCategoryBySlug,
+  isValidTarifSlug,
+} from './data/tarifDefaults';
 import {
   CmsDatabaseInfo,
   CmsUser,
@@ -44,6 +51,7 @@ import { applyPageSeo } from './utils/seo';
 interface RouteState {
   page: NavPageTarget;
   articleId: string | null;
+  tarifCategory?: TarifCategorySlug;
 }
 
 const CMS_TOKEN_KEY = 'p2b_cms_token';
@@ -71,6 +79,25 @@ function getRouteFromLocation(pathnameRaw: string, hashRaw: string): RouteState 
   if (cleanPath === '/struktur-organisasi') {
     return { page: 'struktur-organisasi', articleId: null };
   }
+  if (cleanPath === '/kerjasama') {
+    return { page: 'kerjasama', articleId: null };
+  }
+  if (cleanPath === '/tarif-layanan') {
+    return {
+      page: 'tarif-layanan',
+      articleId: null,
+      tarifCategory: 'penunjang-akademik',
+    };
+  }
+  if (cleanPath.startsWith('/tarif-layanan/')) {
+    const slug = decodeURIComponent(
+      cleanPath.slice('/tarif-layanan/'.length)
+    ).trim();
+    if (isValidTarifSlug(slug)) {
+      return { page: 'tarif-layanan', articleId: null, tarifCategory: slug };
+    }
+    return { page: 'not-found', articleId: null };
+  }
   if (cleanPath === '/magang') {
     return { page: 'magang', articleId: null };
   }
@@ -95,6 +122,24 @@ function getRouteFromLocation(pathnameRaw: string, hashRaw: string): RouteState 
     if (hashRaw === '#struktur-organisasi') {
       return { page: 'struktur-organisasi', articleId: null };
     }
+    if (hashRaw === '#kerjasama') {
+      return { page: 'kerjasama', articleId: null };
+    }
+    if (hashRaw === '#tarif-layanan') {
+      return {
+        page: 'tarif-layanan',
+        articleId: null,
+        tarifCategory: 'penunjang-akademik',
+      };
+    }
+    if (hashRaw.startsWith('#tarif-layanan/')) {
+      const slug = decodeURIComponent(
+        hashRaw.replace('#tarif-layanan/', '')
+      ).trim();
+      if (isValidTarifSlug(slug)) {
+        return { page: 'tarif-layanan', articleId: null, tarifCategory: slug };
+      }
+    }
     if (hashRaw === '#magang') {
       return { page: 'magang', articleId: null };
     }
@@ -112,6 +157,8 @@ const pageToPath: Record<Exclude<NavPageTarget, 'news-detail' | 'not-found'>, st
   about: '/tentang-kami',
   'visi-misi': '/visi-misi',
   'struktur-organisasi': '/struktur-organisasi',
+  kerjasama: '/kerjasama',
+  'tarif-layanan': '/tarif-layanan/penunjang-akademik',
   magang: '/magang',
   'magang-register': '/magang/daftar',
   'all-news': '/semua-berita',
@@ -377,7 +424,15 @@ export default function App() {
     const nextPath = pageToPath[target] || '/';
     window.history.pushState(null, '', nextPath);
     setPathname(nextPath);
-    setRoute({ page: target, articleId: null });
+    setRoute(
+      target === 'tarif-layanan'
+        ? {
+            page: 'tarif-layanan',
+            articleId: null,
+            tarifCategory: 'penunjang-akademik',
+          }
+        : { page: target, articleId: null }
+    );
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -572,6 +627,37 @@ export default function App() {
       return;
     }
 
+    if (route.page === 'kerjasama') {
+      const ksTitle = siteSettings.page_kerjasama_title?.trim() || 'Kerjasama & Sewa Aset';
+      const ksDesc =
+        siteSettings.page_kerjasama_subtitle?.trim().slice(0, 160) ||
+        'Daftar kemitraan strategis, pemanfaatan lahan dan bangunan, serta kerja sama operasional di lingkungan Pusat Pengembangan Bisnis UIN Salatiga.';
+      applyPageSeo({
+        title: `${ksTitle} — P2B UIN Salatiga`,
+        description: ksDesc,
+        path: '/kerjasama',
+        image: siteSettings.page_kerjasama_image,
+      });
+      return;
+    }
+
+    if (route.page === 'tarif-layanan') {
+      const activeCat = getTarifCategoryBySlug(route.tarifCategory);
+      const tarifDocTitle =
+        siteSettings[activeCat.settingKeys.title]?.trim() ||
+        activeCat.navLabel;
+      const tarifDesc =
+        siteSettings[activeCat.settingKeys.description]?.trim().slice(0, 160) ||
+        activeCat.defaultDescription.slice(0, 160);
+      applyPageSeo({
+        title: `${tarifDocTitle} — P2B UIN Salatiga`,
+        description: tarifDesc,
+        path: `/tarif-layanan/${activeCat.slug}`,
+        image: siteSettings.page_tarif_image,
+      });
+      return;
+    }
+
     if (route.page === 'magang') {
       applyPageSeo({
         title: 'Magang di P2B — Open Recruitment P2B UIN Salatiga',
@@ -637,7 +723,7 @@ export default function App() {
         },
       },
     });
-  }, [pathname, effectivePage, selectedArticle, siteSettings]);
+  }, [pathname, effectivePage, route.page, route.tarifCategory, selectedArticle, siteSettings]);
 
   // Dedicated Hidden Login Route: /silahkanmasuk
   if (pathname === '/silahkanmasuk') {
@@ -744,6 +830,18 @@ export default function App() {
         <StrukturOrganisasiPage
           settings={siteSettings}
           onOpenAbout={() => navigateToPage('about')}
+          onNavigateSection={navigateToSection}
+        />
+      ) : effectivePage === 'kerjasama' ? (
+        <KerjasamaPage
+          settings={siteSettings}
+          onNavigateSection={navigateToSection}
+        />
+      ) : effectivePage === 'tarif-layanan' ? (
+        <TarifLayananPage
+          settings={siteSettings}
+          activeCategorySlug={route.tarifCategory}
+          onSelectCategory={(slug) => navigatePath(`/tarif-layanan/${slug}`)}
           onNavigateSection={navigateToSection}
         />
       ) : effectivePage === 'magang' ? (

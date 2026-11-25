@@ -128,6 +128,8 @@ const profileLinks = [
   { label: 'Tentang Kami', path: '/tentang-kami' },
   { label: 'Visi & Misi', path: '/visi-misi' },
   { label: 'Struktur Organisasi', path: '/struktur-organisasi' },
+  { label: 'Kerjasama', path: '/kerjasama' },
+  { label: 'Tarif Layanan', path: '/tarif-layanan' },
   { label: 'Magang di P2B', path: '/magang' },
   { label: 'Semua Berita', path: '/semua-berita' },
 ];

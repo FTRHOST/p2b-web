@@ -1553,6 +1553,341 @@ async function startServer() {
     }
   });
 
+  // Google Sheets Publish-to-Web CSV integration for /kerjasama
+  const DEFAULT_KERJASAMA_CSV_URL =
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vQjfwTw9fR12XFZ1R3tYSai32rQdYb9ydZD7ciVqc9cD6nl4a9BIDj7jvD_901D3g/pub?gid=1878903189&single=true&output=csv';
+  const DEFAULT_KERJASAMA_SHEET_LABEL = 'Sheet BPK';
+
+  const isAllowedRemoteCsvUrl = (rawUrl: string): boolean => {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return false;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        return false;
+      }
+      const host = parsed.hostname.toLowerCase();
+      if (
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host === '0.0.0.0' ||
+        host === '::1' ||
+        host.endsWith('.local') ||
+        host.endsWith('.internal') ||
+        /^10\./.test(host) ||
+        /^192\.168\./.test(host) ||
+        /^169\.254\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+      ) {
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const sanitizeSheetExternalLink = (rawValue: string): string => {
+    const trimmed = rawValue.trim();
+    if (!trimmed) return '';
+    try {
+      const parsed = new URL(trimmed);
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+        ? parsed.toString()
+        : '';
+    } catch {
+      return '';
+    }
+  };
+
+  const parseCsvMatrix = (csvRaw: string): string[][] => {
+    const text = csvRaw.replace(/^\uFEFF/, '');
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentCell = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') {
+            currentCell += '"';
+            i += 1;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          currentCell += ch;
+        }
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+      } else if (ch === '\r') {
+        if (text[i + 1] === '\n') i += 1;
+        currentRow.push(currentCell.trim());
+        rows.push(currentRow);
+        currentRow = [];
+        currentCell = '';
+      } else if (ch === '\n') {
+        currentRow.push(currentCell.trim());
+        rows.push(currentRow);
+        currentRow = [];
+        currentCell = '';
+      } else {
+        currentCell += ch;
+      }
+    }
+
+    if (currentCell.length > 0 || currentRow.length > 0) {
+      currentRow.push(currentCell.trim());
+      rows.push(currentRow);
+    }
+
+    return rows;
+  };
+
+  const normalizeHeaderCell = (val: string): string =>
+    val.toLowerCase().replace(/\s+/g, ' ').trim();
+
+  const parseKerjasamaSheetCsv = (csvRaw: string) => {
+    const rows = parseCsvMatrix(csvRaw);
+    if (rows.length === 0) {
+      return { title: 'Daftar Kerjasama', items: [] };
+    }
+
+    let headerRowIdx = -1;
+    for (let i = 0; i < Math.min(rows.length, 25); i += 1) {
+      const normCells = rows[i].map(normalizeHeaderCell);
+      const hasNama = normCells.some(
+        (c) => c.includes('nama penyewa') || c === 'penyewa' || c === 'mitra'
+      );
+      const hasPerihal = normCells.some((c) => c.includes('perihal'));
+      const hasJenis = normCells.some((c) => c === 'jenis' || c.includes('jenis'));
+      const hasBerkas = normCells.some((c) => c.includes('berkas') || c.includes('dokumen'));
+      if (hasNama && (hasPerihal || hasJenis || hasBerkas)) {
+        headerRowIdx = i;
+        break;
+      }
+    }
+
+    if (headerRowIdx === -1) {
+      headerRowIdx = 0;
+    }
+
+    const headerCells = (rows[headerRowIdx] || []).map(normalizeHeaderCell);
+    const subHeaderCells = (rows[headerRowIdx + 1] || []).map(normalizeHeaderCell);
+
+    const hasSubHeader = subHeaderCells.some(
+      (c) => c === 'mulai' || c === 'selesai' || c.includes('tanggal mulai')
+    );
+
+    // Optional sheet title placed above the table header (e.g. Row 0: DAFTAR KERJASAMA SEWA)
+    let sheetTitle = 'Daftar Kerjasama Sewa';
+    for (let i = 0; i < headerRowIdx; i += 1) {
+      const candidate = rows[i].find((cell) => cell.trim().length > 0);
+      if (candidate) {
+        sheetTitle = candidate.trim();
+        break;
+      }
+    }
+
+    const findCol = (matcher: (cell: string) => boolean, fallbackIdx: number): number => {
+      const foundMain = headerCells.findIndex(matcher);
+      if (foundMain >= 0) return foundMain;
+      if (hasSubHeader) {
+        const foundSub = subHeaderCells.findIndex(matcher);
+        if (foundSub >= 0) return foundSub;
+      }
+      return fallbackIdx;
+    };
+
+    const idxNo = findCol((c) => c === 'no' || c === 'no.', 0);
+    const idxNama = findCol((c) => c.includes('nama penyewa') || c === 'penyewa', 1);
+    const idxMasa = findCol((c) => c.includes('masa sewa') || c.includes('kerjasama'), 2);
+    const idxMulai = findCol((c) => c === 'mulai' || c.includes('mulai'), idxMasa);
+    const idxSelesai = findCol((c) => c === 'selesai' || c.includes('selesai'), idxMulai + 1);
+    const idxPerihal = findCol((c) => c.includes('perihal'), 4);
+    const idxJenis = findCol((c) => c === 'jenis' || c.includes('jenis'), 5);
+    const idxBerkas = findCol(
+      (c) => c.includes('berkas') || c.includes('dokumen') || c.includes('link'),
+      6
+    );
+
+    const dataStartIdx = hasSubHeader ? headerRowIdx + 2 : headerRowIdx + 1;
+    const items: Array<{
+      rowIndex: number;
+      no: string;
+      namaPenyewa: string;
+      tanggalMulai: string;
+      tanggalSelesai: string;
+      perihal: string;
+      jenis: string;
+      berkasUrl: string;
+    }> = [];
+
+    for (let r = dataStartIdx; r < rows.length; r += 1) {
+      const row = rows[r];
+      if (!row || row.every((c) => !c.trim())) continue;
+
+      const namaPenyewa = (row[idxNama] || '').trim();
+      const perihal = (row[idxPerihal] || '').trim();
+      if (!namaPenyewa && !perihal) continue;
+
+      const normNama = normalizeHeaderCell(namaPenyewa);
+      if (normNama === 'nama penyewa' || normNama === 'mulai') continue;
+
+      const no = (row[idxNo] || '').trim() || String(items.length + 1);
+      const tanggalMulai = (row[idxMulai] || '').trim();
+      const tanggalSelesai = (row[idxSelesai] || '').trim();
+      const jenis = (row[idxJenis] || '').trim();
+      const rawBerkas = (row[idxBerkas] || '').trim();
+      const berkasUrl = sanitizeSheetExternalLink(rawBerkas);
+
+      items.push({
+        rowIndex: items.length + 1,
+        no,
+        namaPenyewa,
+        tanggalMulai,
+        tanggalSelesai,
+        perihal,
+        jenis,
+        berkasUrl,
+      });
+    }
+
+    return { title: sheetTitle, items };
+  };
+
+  const fetchAndParseKerjasamaCsv = async (csvUrl: string) => {
+    if (!isAllowedRemoteCsvUrl(csvUrl)) {
+      throw new Error('Tautan CSV harus berupa URL publik http:// atau https:// yang valid.');
+    }
+
+    const upstream = await fetch(csvUrl, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(12000),
+      headers: {
+        Accept: 'text/csv,text/plain;q=0.9,*/*;q=0.8',
+        'User-Agent': 'P2B-UIN-Salatiga-Portal/1.0',
+      },
+    });
+
+    if (!upstream.ok) {
+      throw new Error(
+        `Gagal mengambil CSV dari Google Sheets (HTTP ${upstream.status}). Pastikan sheet sudah dipublikasikan sebagai CSV.`
+      );
+    }
+
+    const rawText = await upstream.text();
+    if (/^\s*<!doctype html/i.test(rawText) || /^\s*<html/i.test(rawText)) {
+      throw new Error(
+        'Tautan mengembalikan halaman HTML, bukan CSV. Pastikan opsi Publish to Web memilih format Comma-separated values (.csv).'
+      );
+    }
+
+    return parseKerjasamaSheetCsv(rawText);
+  };
+
+  app.get('/api/public/kerjasama', async (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    let csvUrl = DEFAULT_KERJASAMA_CSV_URL;
+    let sheetLabel = DEFAULT_KERJASAMA_SHEET_LABEL;
+
+    if (!dbReady) {
+      await ensureDatabaseReady().catch(() => {});
+    }
+
+    if (dbReady) {
+      try {
+        const settings = await fetchSiteSettingsMap();
+        if (settings.kerjasama_csv_url?.trim()) {
+          csvUrl = settings.kerjasama_csv_url.trim();
+        }
+        if (settings.kerjasama_sheet_label?.trim()) {
+          sheetLabel = settings.kerjasama_sheet_label.trim();
+        }
+      } catch {
+        // Use defaults if settings query fails
+      }
+    }
+
+    try {
+      const parsed = await fetchAndParseKerjasamaCsv(csvUrl);
+      res.json({
+        ok: true,
+        title: parsed.title,
+        sheetLabel,
+        csvUrl,
+        fetchedAt: new Date().toISOString(),
+        items: parsed.items,
+      });
+    } catch (err) {
+      res.status(502).json({
+        ok: false,
+        title: 'Daftar Kerjasama',
+        sheetLabel,
+        csvUrl,
+        fetchedAt: new Date().toISOString(),
+        items: [],
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Gagal membaca data kerjasama dari Google Sheets.',
+      });
+    }
+  });
+
+  app.post(
+    '/api/cms/kerjasama/preview',
+    requireCmsAuth,
+    async (req: AuthenticatedRequest, res: Response) => {
+      const body = req.body as { csvUrl?: string };
+      let csvUrl = String(body?.csvUrl || '').trim();
+      let sheetLabel = DEFAULT_KERJASAMA_SHEET_LABEL;
+
+      if (!csvUrl && dbReady) {
+        try {
+          const settings = await fetchSiteSettingsMap();
+          csvUrl = settings.kerjasama_csv_url?.trim() || DEFAULT_KERJASAMA_CSV_URL;
+          sheetLabel = settings.kerjasama_sheet_label?.trim() || DEFAULT_KERJASAMA_SHEET_LABEL;
+        } catch {
+          csvUrl = DEFAULT_KERJASAMA_CSV_URL;
+        }
+      }
+      if (!csvUrl) {
+        csvUrl = DEFAULT_KERJASAMA_CSV_URL;
+      }
+
+      try {
+        const parsed = await fetchAndParseKerjasamaCsv(csvUrl);
+        res.json({
+          ok: true,
+          title: parsed.title,
+          sheetLabel,
+          csvUrl,
+          fetchedAt: new Date().toISOString(),
+          items: parsed.items,
+        });
+      } catch (err) {
+        res.status(400).json({
+          ok: false,
+          title: 'Daftar Kerjasama',
+          sheetLabel,
+          csvUrl,
+          fetchedAt: new Date().toISOString(),
+          items: [],
+          message:
+            err instanceof Error
+              ? err.message
+              : 'Gagal memuat pratinjau CSV Google Sheets.',
+        });
+      }
+    }
+  );
+
   // Public Internship Application Submission (multipart/form-data with optional PDF/DOC/image resume & portfolio)
   const ALLOWED_APPLICANT_MIMES = new Set([
     'application/pdf',
@@ -3511,6 +3846,25 @@ async function startServer() {
       title = 'Struktur Organisasi — P2B UIN Salatiga';
       description =
         'Susunan manajemen, tata kelola, dan unit pelaksana bisnis di lingkungan Pusat Pengembangan Bisnis UIN Salatiga.';
+    } else if (cleanPath === '/kerjasama') {
+      title = 'Kerjasama & Sewa Aset — P2B UIN Salatiga';
+      description =
+        'Daftar kemitraan strategis, pemanfaatan lahan dan bangunan, serta kerja sama operasional di lingkungan Pusat Pengembangan Bisnis UIN Salatiga.';
+    } else if (
+      cleanPath === '/tarif-layanan' ||
+      cleanPath === '/tarif-layanan/penunjang-akademik'
+    ) {
+      title = 'Tarif Layanan Penunjang Akademik — P2B UIN Salatiga';
+      description =
+        'Dokumen resmi tarif layanan penunjang akademik dan pemanfaatan aset P2B UIN Salatiga sesuai SK Rektor Nomor 29 Tahun 2024.';
+    } else if (cleanPath === '/tarif-layanan/klinik-mitra-insani') {
+      title = 'Tarif Layanan Klinik Mitra Insani — P2B UIN Salatiga';
+      description =
+        'Standar tarif layanan kesehatan Klinik Mitra Insani di lingkungan Pusat Pengembangan Bisnis UIN Salatiga.';
+    } else if (cleanPath === '/tarif-layanan/jurnal') {
+      title = 'Tarif Jurnal Ilmiah — P2B UIN Salatiga';
+      description =
+        'Pedoman tarif layanan tata kelola, penerbitan, dan pengelolaan jurnal ilmiah P2B UIN Salatiga.';
     } else if (cleanPath === '/magang') {
       title = 'Magang di P2B — Open Recruitment P2B UIN Salatiga';
       description =
@@ -3689,6 +4043,10 @@ async function startServer() {
       { path: '/tentang-kami', priority: '0.8', changefreq: 'monthly' },
       { path: '/visi-misi', priority: '0.8', changefreq: 'monthly' },
       { path: '/struktur-organisasi', priority: '0.8', changefreq: 'monthly' },
+      { path: '/kerjasama', priority: '0.8', changefreq: 'weekly' },
+      { path: '/tarif-layanan/penunjang-akademik', priority: '0.8', changefreq: 'monthly' },
+      { path: '/tarif-layanan/klinik-mitra-insani', priority: '0.7', changefreq: 'monthly' },
+      { path: '/tarif-layanan/jurnal', priority: '0.7', changefreq: 'monthly' },
       { path: '/magang', priority: '0.8', changefreq: 'weekly' },
       { path: '/semua-berita', priority: '0.9', changefreq: 'daily' },
     ];

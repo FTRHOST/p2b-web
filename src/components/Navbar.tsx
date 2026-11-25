@@ -10,6 +10,8 @@ export type NavPageTarget =
   | 'about'
   | 'visi-misi'
   | 'struktur-organisasi'
+  | 'kerjasama'
+  | 'tarif-layanan'
   | 'magang'
   | 'magang-register'
   | 'all-news'
@@ -133,6 +135,12 @@ export function Navbar({
     const currentNormalized = normalizeTargetPath(currentPath);
     if (normalized === '/' && item.parentId !== null) return false;
     if (normalized === '/magang' && currentNormalized === '/magang/daftar') {
+      return true;
+    }
+    if (
+      normalized === '/tarif-layanan/penunjang-akademik' &&
+      currentNormalized === '/tarif-layanan'
+    ) {
       return true;
     }
     return normalized === currentNormalized;
@@ -279,7 +287,11 @@ export function Navbar({
                       aria-expanded={openDropdownId === item.id}
                       aria-haspopup="true"
                       onClick={() => {
-                        if (item.target.trim() && item.actionType !== 'dropdown') {
+                        if (
+                          item.target.trim() &&
+                          (item.actionType !== 'dropdown' ||
+                            openDropdownId === item.id)
+                        ) {
                           executeNavAction(item);
                         } else {
                           setOpenDropdownId((prev) =>
