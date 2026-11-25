@@ -361,9 +361,6 @@ export function CmsLoginPage({ onLoginSuccess, onBackHome }: CmsLoginPageProps) 
                   <h1 className="text-2xl sm:text-3xl font-normal text-[#164234] tracking-tight">
                     Masuk Pengelola Konten
                   </h1>
-                  <p className="text-xs sm:text-sm text-[#3E544B] leading-relaxed">
-                    Akses sesuai peran akun: Super Admin, Admin, atau Editor Berita.
-                  </p>
                 </div>
 
                 <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
