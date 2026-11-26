@@ -1,3 +1,5 @@
+![Cover Web P2B](./docs/images/cover.png)
+
 # Website & CMS Pusat Pengembangan Bisnis (P2B) UIN Salatiga
 
 Aplikasi web resmi dan sistem manajemen konten (_Content Management System_) untuk **Pusat Pengembangan Bisnis (P2B) Universitas Islam Negeri (UIN) Salatiga** unit pengelola optimalisasi aset, layanan komersial, kemitraan strategis, tarif layanan PTN BLU, program magang mahasiswa, serta publikasi berita kelembagaan.
