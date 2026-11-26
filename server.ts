@@ -23,6 +23,7 @@ import {
   type CmsPermission,
   type CmsRoleKey,
 } from './src/lib/authRoles.ts';
+import { getEssentialSecurityHeaders } from './src/lib/securityHeaders.ts';
 import {
   BUILDER_PAGE_SLUGS,
   BUILDER_PAGE_SLUG_SET,
@@ -1293,12 +1294,21 @@ async function startServer() {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
 
-  // Global HTTP security headers (preserve iframe embed compatibility for preview)
-  app.use((_req: Request, res: Response, next: NextFunction) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('X-DNS-Prefetch-Control', 'off');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+  // Global HTTP security headers including Content-Security-Policy (preserve iframe embed compatibility for preview)
+  const isDevServer = process.env.NODE_ENV !== 'production';
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const fwdProto = String(req.headers['x-forwarded-proto'] || '')
+      .split(',')[0]
+      .trim()
+      .toLowerCase();
+    const isHttpsRequest = req.secure || fwdProto === 'https';
+    const secHeaders = getEssentialSecurityHeaders({
+      isDev: isDevServer,
+      isHttps: isHttpsRequest,
+    });
+    for (const [headerName, headerValue] of Object.entries(secHeaders)) {
+      res.setHeader(headerName, headerValue);
+    }
     next();
   });
 
