@@ -1,6 +1,6 @@
 # Dokumentasi Teknis & Panduan Penggunaan Website P2B UIN Salatiga
 
-Dokumen ini merupakan panduan teknis lengkap dan tutorial operasional untuk aplikasi web resmi **Pusat Pengembangan Bisnis (P2B) Universitas Islam Negeri (UIN) Salatiga** — unit pengelola optimalisasi aset, layanan komersial, kemitraan strategis, tarif layanan PTN BLU, program magang mahasiswa, dan publikasi berita kelembagaan.
+Dokumen ini merupakan panduan teknis lengkap dan tutorial operasional untuk aplikasi web resmi **Pusat Pengembangan Bisnis (P2B) Universitas Islam Negeri (UIN) Salatiga** unit pengelola optimalisasi aset, layanan komersial, kemitraan strategis, tarif layanan PTN BLU, program magang mahasiswa, dan publikasi berita kelembagaan.
 
 ---
 
@@ -25,19 +25,20 @@ Aplikasi dibangun dengan arsitektur **Full-Stack Monolith (SPA + REST API + WebS
 
 ### Stack Teknologi
 
-| Lapisan | Teknologi | Peran Utama |
-| :--- | :--- | :--- |
-| **Frontend UI** | React 19, TypeScript, Vite 8 | Antarmuka pengguna SPA & panel CMS |
-| **Styling & Animasi** | Tailwind CSS v4, Motion (`motion/react`), GSAP (`ScrollTrigger`) | Desain responsif, parallax, animasi gulir |
-| **Ikon & Editor** | `@iconify/react` (`mdi`), `lucide-react`, TinyMCE 8, DOMPurify | Ikon UI & editor berita WYSIWYG ter-sanitasi |
-| **Peta Interaktif** | Leaflet (`leaflet`) | Peta lokasi Gedung Auditorium & kampus |
-| **Backend Server** | Express 4 (`server.ts`), `tsx`, Multer, WebSocket (`ws`) | Proxy API, upload file, SSR metadata/SEO, real-time sync |
-| **Autentikasi & RBAC** | **Better Auth v1.7** (`username`, `admin`, `bearer` plugins) | Sesi `HttpOnly` cookie, Bearer token in-memory, peran akses |
-| **Database** | MariaDB / MySQL (`mysql2/promise` pool) | Penyimpanan konten CMS, media blob, akun, lamaran magang |
+| Lapisan                | Teknologi                                                        | Peran Utama                                                 |
+| :--------------------- | :--------------------------------------------------------------- | :---------------------------------------------------------- |
+| **Frontend UI**        | React 19, TypeScript, Vite 8                                     | Antarmuka pengguna SPA & panel CMS                          |
+| **Styling & Animasi**  | Tailwind CSS v4, Motion (`motion/react`), GSAP (`ScrollTrigger`) | Desain responsif, parallax, animasi gulir                   |
+| **Ikon & Editor**      | `@iconify/react` (`mdi`), `lucide-react`, TinyMCE 8, DOMPurify   | Ikon UI & editor berita WYSIWYG ter-sanitasi                |
+| **Peta Interaktif**    | Leaflet (`leaflet`)                                              | Peta lokasi Gedung Auditorium & kampus                      |
+| **Backend Server**     | Express 4 (`server.ts`), `tsx`, Multer, WebSocket (`ws`)         | Proxy API, upload file, SSR metadata/SEO, real-time sync    |
+| **Autentikasi & RBAC** | **Better Auth v1.7** (`username`, `admin`, `bearer` plugins)     | Sesi `HttpOnly` cookie, Bearer token in-memory, peran akses |
+| **Database**           | MariaDB / MySQL (`mysql2/promise` pool)                          | Penyimpanan konten CMS, media blob, akun, lamaran magang    |
 
 ### Pola Sinkronisasi & Performa
+
 - **Server Bootstrap (`/api/public/bootstrap`)**: Mengambil seluruh konfigurasi publik (pengaturan situs, blok Page Builder, berita, kategori, logo mitra, galeri/posisi magang, daftar tarif layanan) dalam satu permintaan terstruktur, lengkap dengan fallback default bawaan apabila database sedang tidak tersedia.
-- **Sinkronisasi Real-Time (`useRealtimeSync`)**: Klien terhubung melalui **WebSocket (`/ws/realtime`)** dan cadangan *version polling* (`/api/public/version` setiap 15 detik + saat tab aktif kembali). Setiap perubahan di CMS langsung memancarkan event `cms:committed` sehingga pengunjung melihat pembaruan tanpa muat ulang manual.
+- **Sinkronisasi Real-Time (`useRealtimeSync`)**: Klien terhubung melalui **WebSocket (`/ws/realtime`)** dan cadangan _version polling_ (`/api/public/version` setiap 15 detik + saat tab aktif kembali). Setiap perubahan di CMS langsung memancarkan event `cms:committed` sehingga pengunjung melihat pembaruan tanpa muat ulang manual.
 - **Keamanan Sanitasi**: Seluruh HTML artikel dari TinyMCE disanitasi menggunakan **DOMPurify**, dan setiap URL tautan/media/PDF melewati validasi protokol aman (`http:`, `https:`, `/api/media/...`, atau path lokal valid).
 
 ---
@@ -113,24 +114,26 @@ Aplikasi dibangun dengan arsitektur **Full-Stack Monolith (SPA + REST API + WebS
 ## 3. Instalasi, Environment Variables & Deployment
 
 ### Prasyarat
+
 - Node.js `>= 20.x` (atau Bun)
 - Server **MariaDB / MySQL** yang dapat diakses dari server aplikasi
 
 ### Konfigurasi `.env`
+
 Salin `.env.example` menjadi `.env` (atau atur di Secrets Manager pada platform deploy):
 
-| Variabel | Wajib | Keterangan |
-| :--- | :---: | :--- |
-| `DB_HOST` | Ya | Hostname / IP server MariaDB (contoh: `localhost` atau host tunnel) |
-| `DB_PORT` | Ya | Port database (default `3306`, atau port tunnel yang dikonfigurasi) |
-| `DB_USER` | Ya | Username database MariaDB |
-| `DB_PASSWORD` | Ya | Password database MariaDB |
-| `DB_NAME` | Ya | Nama schema database (default `p2b`) |
-| `BETTER_AUTH_SECRET` | Disarankan | Kunci acak minimal 32 karakter untuk menandatangani token sesi Better Auth |
-| `CMS_SESSION_SECRET` | Opsional | Fallback secret apabila `BETTER_AUTH_SECRET` belum diisi |
-| `APP_URL` | Disarankan | URL publik penuh aplikasi (mis. `https://pusatbisnis.uinsalatiga.ac.id`) |
-| `CMS_ADMIN_PASSWORD` | Opsional | Jika diisi saat DB kosong, server otomatis membuat akun `admin` (`super_admin`) |
-| `PORT` | Opsional | Port server HTTP (default `3000`) |
+| Variabel             |   Wajib    | Keterangan                                                                      |
+| :------------------- | :--------: | :------------------------------------------------------------------------------ |
+| `DB_HOST`            |     Ya     | Hostname / IP server MariaDB (contoh: `localhost` atau host tunnel)             |
+| `DB_PORT`            |     Ya     | Port database (default `3306`, atau port tunnel yang dikonfigurasi)             |
+| `DB_USER`            |     Ya     | Username database MariaDB                                                       |
+| `DB_PASSWORD`        |     Ya     | Password database MariaDB                                                       |
+| `DB_NAME`            |     Ya     | Nama schema database (default `p2b`)                                            |
+| `BETTER_AUTH_SECRET` | Disarankan | Kunci acak minimal 32 karakter untuk menandatangani token sesi Better Auth      |
+| `CMS_SESSION_SECRET` |  Opsional  | Fallback secret apabila `BETTER_AUTH_SECRET` belum diisi                        |
+| `APP_URL`            | Disarankan | URL publik penuh aplikasi (mis. `https://pusatbisnis.uinsalatiga.ac.id`)        |
+| `CMS_ADMIN_PASSWORD` |  Opsional  | Jika diisi saat DB kosong, server otomatis membuat akun `admin` (`super_admin`) |
+| `PORT`               |  Opsional  | Port server HTTP (default `3000`)                                               |
 
 ### Perintah Pengembangan & Produksi
 
@@ -158,14 +161,16 @@ npm start
 Saat startup, `server.ts` dan `src/auth.ts` menjalankan inisialisasi skema secara idempoten (`CREATE TABLE IF NOT EXISTS` dan migrasi Better Auth `getMigrations`).
 
 ### A. Tabel Autentikasi (Better Auth)
+
 1. **`user`**: Menyimpan akun pengelola (`id`, `name`, `email`, `username`, `displayUsername`, `role`, `banned`, `banReason`, `banExpires`, `createdAt`, `updatedAt`).
 2. **`session`**: Menyimpan sesi aktif & masa kedaluwarsa (`12 jam`, pembaruan otomatis tiap `1 jam`).
 3. **`account`**: Menyimpan kredensial ter-hash (`scrypt` bawaan Better Auth maupun dukungan verifikasi `bcrypt` hasil migrasi tabel lama).
 4. **`verification`**: Token verifikasi standar Better Auth.
 
-> *Catatan Migrasi*: Jika masih terdapat tabel lama `cms_users`, sistem otomatis memigrasikan akun-akun tersebut ke tabel Better Auth `user` & `account` pada saat startup.
+> _Catatan Migrasi_: Jika masih terdapat tabel lama `cms_users`, sistem otomatis memigrasikan akun-akun tersebut ke tabel Better Auth `user` & `account` pada saat startup.
 
 ### B. Tabel Konten & Operasional CMS
+
 1. **`cms_home_blocks`**: Menyimpan susunan blok Page Builder lintas halaman (`page_slug`: `home`, `about`, `visi-misi`, `struktur-organisasi`), `block_type`, `label`, `config_json`, `sort_order`, `is_visible`.
 2. **`cms_builder_presets`**: Katalog preset elemen kustom yang dibuat pengguna dan otomatis terdaftar untuk digunakan ulang di halaman mana pun.
 3. **`cms_news`**: Artikel berita (`slug`, `title`, `category`, `date_label`, `excerpt`, `content_html`, `image_url`, `gallery_json`, `attachments_json`, `is_published`, `sort_order`).
@@ -184,50 +189,59 @@ Saat startup, `server.ts` dan `src/auth.ts` menjalankan inisialisasi skema secar
 ## 5. Fitur Website Publik (Frontend)
 
 ### 5.1 Beranda (`/`) & Tata Letak Khas P2B
-- **Hero Layar Penuh**: Menampilkan gambar latar beranimasi parallax GSAP, judul bertahap per kata (`ScrollWordTitle`), deskripsi ringkas, dan tombol sudut kanan-bawah berbentuk *faux-cutout* (`BottomRightCorner`).
+
+- **Hero Layar Penuh**: Menampilkan gambar latar beranimasi parallax GSAP, judul bertahap per kata (`ScrollWordTitle`), deskripsi ringkas, dan tombol sudut kanan-bawah berbentuk _faux-cutout_ (`BottomRightCorner`).
 - **Marquee Logo Mitra**: Barisan logo UIN Salatiga, unit bisnis, dan mitra eksternal yang berjalan mulus tanpa putus.
 - **Tentang P2B & Kartu Fokus (`WhoWeAre`)**: Penjelasan peran PTN BLU disertai kartu fokus interaktif yang membuka detail poin unggulan saat diklik.
 - **Visi Kelembagaan (`VisiCard`)**, **News & Update** (3 berita terbaru dengan kartu editorial), **Peta Interaktif Leaflet**, dan **Footer**.
 
 ![Tampilan Halaman Beranda P2B UIN Salatiga](./images/01-beranda-publik.png)
-> *Gambar 01 — Tangkapan layar halaman Beranda (`/`) di `docs/images/01-beranda-publik.png`.*
+
+> _Gambar 01 — Tangkapan layar halaman Beranda (`/`) di `docs/images/01-beranda-publik.png`._
 
 ---
 
 ### 5.2 Navigasi Header, Layanan & Kontak (`Navbar.tsx`)
-- **Perilaku Cerdas**: Header mengambang (*floating glassmorphism*) yang bersembunyi otomatis saat halaman digulir ke bawah dan muncul kembali ketika pengguna menggulir ke atas.
+
+- **Perilaku Cerdas**: Header mengambang (_floating glassmorphism_) yang bersembunyi otomatis saat halaman digulir ke bawah dan muncul kembali ketika pengguna menggulir ke atas.
 - **Menu Profil**: Dropdown menuju `/tentang-kami`, `/visi-misi`, dan `/struktur-organisasi`.
 - **Menu Tarif Layanan**: Dropdown **otomatis mengikuti daftar aktif** dari database `cms_tarif_items` (tidak lagi terbatas statis).
-- **Menu Layanan**: Menampilkan dropdown layanan komersial (**Air Mineral**, **Pelayanan Sewa Aset**, **Klinik UIN SAGA**, **Kantin**, **Tiket**) yang membuka modal informasi layanan. *(Opsi Gedung Auditorium telah dihapus dari daftar ini sesuai penyesuaian operasional).*
+- **Menu Layanan**: Menampilkan dropdown layanan komersial (**Air Mineral**, **Pelayanan Sewa Aset**, **Klinik UIN SAGA**, **Kantin**, **Tiket**) yang membuka modal informasi layanan. _(Opsi Gedung Auditorium telah dihapus dari daftar ini sesuai penyesuaian operasional)._
 - **Tombol Kontak**: Membuka modal informasi kontak resmi (Telepon, WhatsApp langsung `wa.me`, Email `p2b@uinsalatiga.ac.id`, dan Alamat lengkap).
 
 ---
 
 ### 5.3 Halaman Profil Kelembagaan (Terkoneksi Page Builder)
+
 Ketiga halaman profil dapat disusun ulang, ditambah elemen baru, atau diedit per blok melalui CMS Page Builder:
+
 1. **Tentang Kami (`/tentang-kami`)**: `PageHero`, narasi profil 2 kolom (`about_intro`), galeri foto ganda (`dual_banners`), dan 4 prinsip tata kelola BLU (`governance_values`).
 2. **Visi & Misi (`/visi-misi`)**: `PageHero`, `VisiCard`, dan grid 5 fokus misi strategis (`misi_grid`).
 3. **Struktur Organisasi (`/struktur-organisasi`)**: `PageHero`, bagan struktur organisasi sesuai **SK Rektor UIN Salatiga Nomor 56 Tahun 2026** lengkap dengan penampil/tautan unduh PDF SK (`org_chart`), serta grid 4 ruang lingkup unit usaha (`unit_divisions`).
 
 ![Halaman Profil & Struktur Organisasi P2B](./images/02-halaman-profil-struktur.png)
-> *Gambar 02 — Tangkapan layar halaman `/struktur-organisasi` atau `/tentang-kami` di `docs/images/02-halaman-profil-struktur.png`.*
+
+> _Gambar 02 — Tangkapan layar halaman `/struktur-organisasi` atau `/tentang-kami` di `docs/images/02-halaman-profil-struktur.png`._
 
 ---
 
 ### 5.4 Berita & Update (`/semua-berita` & `/berita/:slug`)
+
 - **Halaman Arsip (`/semua-berita`)**: Filter berdasarkan kategori berita dan kotak pencarian judul/ringkasan secara real-time.
 - **Halaman Detail (`/berita/:slug`)**:
   - Konten artikel berformat kaya (heading, tabel, daftar, kutipan, tautan) yang aman dari XSS.
-  - Galeri foto dokumentasi tambahan dengan keterangan gambar (*caption*) dan mode perbesar (*lightbox*).
+  - Galeri foto dokumentasi tambahan dengan keterangan gambar (_caption_) dan mode perbesar (_lightbox_).
   - Daftar **Lampiran Dokumen PDF** yang bisa dilihat langsung atau diunduh.
   - Rekomendasi berita terkait di bagian bawah.
 
 ![Halaman Detail Berita dengan Galeri dan Lampiran](./images/03-berita-detail.png)
-> *Gambar 03 — Tangkapan layar halaman detail berita di `docs/images/03-berita-detail.png`.*
+
+> _Gambar 03 — Tangkapan layar halaman detail berita di `docs/images/03-berita-detail.png`._
 
 ---
 
 ### 5.5 Kerjasama & Sewa Aset (`/kerjasama`)
+
 - **Sinkronisasi Google Sheets (Publish-to-Web CSV)**: Server melakukan fetch & parsing CSV dari tautan Google Sheets yang diatur di CMS (default: Sheet BPK), mendukung struktur header bertingkat:
   - `Nama Penyewa`
   - `Masa Sewa/Kerjasama` (`Mulai` & `Selesai`)
@@ -242,26 +256,30 @@ Ketiga halaman profil dapat disusun ulang, ditambah elemen baru, atau diedit per
 - **Hero Dinamis**: Gambar latar, eyebrow, judul, subjudul, dan teks pojok kanan-bawah dapat diatur dari CMS.
 
 ![Halaman Kerjasama & Sewa Aset dengan Fitur Sorting dan Ikon Berkas](./images/04-halaman-kerjasama.png)
-> *Gambar 04 — Tangkapan layar halaman `/kerjasama` di `docs/images/04-halaman-kerjasama.png`.*
+
+> _Gambar 04 — Tangkapan layar halaman `/kerjasama` di `docs/images/04-halaman-kerjasama.png`._
 
 ---
 
 ### 5.6 Tarif Layanan (`/tarif-layanan/:slug`)
-- **Tab Kategori Dinamis**: Menampilkan seluruh kategori tarif aktif dari database (secara bawaan: *Tarif Layanan Penunjang Akademik — SK Rektor No. 29 Tahun 2024*, *Tarif Layanan Klinik Mitra Insani*, dan *Tarif Jurnal*, serta kategori tambahan apa pun yang dibuat dari CMS).
+
+- **Tab Kategori Dinamis**: Menampilkan seluruh kategori tarif aktif dari database (secara bawaan: _Tarif Layanan Penunjang Akademik — SK Rektor No. 29 Tahun 2024_, _Tarif Layanan Klinik Mitra Insani_, dan _Tarif Jurnal_, serta kategori tambahan apa pun yang dibuat dari CMS).
 - **PDF Viewer Terintegrasi**:
   - Jika sumber berupa link **Google Drive** (`/file/d/<ID>/view`), aplikasi otomatis mengonversinya ke URL `/preview` agar tampil di dalam viewer dan menyediakan tombol buka tab baru & unduh.
   - Jika sumber berupa berkas **PDF Media Library (`/api/media/...`)** atau PDF lokal (`public/assets/...`), langsung ditampilkan pada iframe/object PDF viewer lengkap dengan tombol unduh.
-  - Dilengkapi fallback PDF lokal untuk *Tarif Layanan Penunjang Akademik* apabila sumber utama belum dimuat.
+  - Dilengkapi fallback PDF lokal untuk _Tarif Layanan Penunjang Akademik_ apabila sumber utama belum dimuat.
 
 ![Halaman Tarif Layanan dengan PDF Viewer](./images/05-tarif-layanan-pdf-viewer.png)
-> *Gambar 05 — Tangkapan layar halaman `/tarif-layanan/penunjang-akademik` di `docs/images/05-tarif-layanan-pdf-viewer.png`.*
+
+> _Gambar 05 — Tangkapan layar halaman `/tarif-layanan/penunjang-akademik` di `docs/images/05-tarif-layanan-pdf-viewer.png`._
 
 ---
 
 ### 5.7 Program Magang P2B (`/magang` & `/magang/daftar`)
+
 - **Halaman Informasi (`/magang`)**:
   - Galeri aktivitas mahasiswa magang.
-  - Daftar posisi/divisi yang dikelola CMS (contoh: *Content Creator*, *Graphic Designer*, *Office Administrator*), lengkap dengan badge status ketersediaan (**Dibuka** / **Penuh**), deskripsi, dan rincian tugas.
+  - Daftar posisi/divisi yang dikelola CMS (contoh: _Content Creator_, _Graphic Designer_, _Office Administrator_), lengkap dengan badge status ketersediaan (**Dibuka** / **Penuh**), deskripsi, dan rincian tugas.
   - Daftar benefit program magang.
 - **Formulir Pendaftaran (`/magang/daftar`)**:
   - Pengisian data mahasiswa (Nama, Email, No. HP/WA, Fakultas UIN Salatiga, Program Studi, Pengenalan P2B, Pilihan Posisi yang tersedia, Alasan minat, Harapan).
@@ -269,7 +287,8 @@ Ketiga halaman profil dapat disusun ulang, ditambah elemen baru, atau diedit per
   - Setelah berhasil dikirim (`POST /api/public/magang/apply`), pelamar langsung mendapatkan **Kode Registrasi** unik (contoh: `P2B-MGG-2026...`).
 
 ![Halaman Program Magang dan Formulir Pendaftaran](./images/06-halaman-magang-daftar.png)
-> *Gambar 06 — Tangkapan layar halaman `/magang` atau `/magang/daftar` di `docs/images/06-halaman-magang-daftar.png`.*
+
+> _Gambar 06 — Tangkapan layar halaman `/magang` atau `/magang/daftar` di `docs/images/06-halaman-magang-daftar.png`._
 
 ---
 
@@ -278,28 +297,30 @@ Ketiga halaman profil dapat disusun ulang, ditambah elemen baru, atau diedit per
 Sistem autentikasi CMS menggunakan **Better Auth** (`/src/auth.ts`, `/src/lib/authRoles.ts`, `/src/lib/authClient.ts`) yang diproteksi di rute tersembunyi `/silahkanmasuk`.
 
 ### 6.1 Alur Aktivasi & Masuk
+
 1. **Aktivasi Pertama Kali**: Apabila tabel `user` di database masih kosong dan `CMS_ADMIN_PASSWORD` tidak ditetapkan di `.env`, halaman `/silahkanmasuk` otomatis menampilkan formulir **Buat Akun Super Admin** pertama (`POST /api/auth-setup/claim`). Setelah satu akun terdaftar, endpoint aktivasi ini otomatis terkunci (`409 Conflict`).
 2. **Login Standar**: Pengguna dapat masuk memakai **Username** atau **Email** beserta password. Token sesi dikirim melalui `HttpOnly` cookie sekaligus `Bearer` token di memori JavaScript untuk kompatibilitas lingkungan proxy/iframe.
 
 ![Halaman Login Pengelola CMS](./images/07-login-cms.png)
-> *Gambar 07 — Tangkapan layar halaman `/silahkanmasuk` di `docs/images/07-login-cms.png`.*
+
+> _Gambar 07 — Tangkapan layar halaman `/silahkanmasuk` di `docs/images/07-login-cms.png`._
 
 ### 6.2 Matriks Profil Peran (3 Peran)
 
-| Fitur / Modul CMS | Super Admin (`super_admin`) | Admin (`admin`) | Editor Berita (`editor_berita`) |
-| :--- | :---: | :---: | :---: |
-| **Ringkasan & Status Database** | Ya | Ya | Ya (Ringkasan berita) |
-| **Page Builder (Beranda & Profil)** | Ya | Ya | Tidak |
-| **Kelola Berita & Kategori Berita** | Ya | Ya | Ya |
-| **Unggah Foto/PDF di Editor Berita** | Ya | Ya | Ya |
-| **Media Library (Lihat / Edit / Hapus / Export-Import)** | Ya (Penuh) | Ya (Penuh) | Baca & Pakai Media |
-| **Logo Mitra** | Ya | Ya | Tidak |
-| **Kerjasama (Google Sheets CSV & Hero)** | Ya | Ya | Tidak |
-| **Tarif Layanan (CRUD Kategori & PDF)** | Ya | Ya | Tidak |
-| **Magang P2B (Galeri, Posisi & Pendaftar)** | Ya | Ya | Tidak |
-| **Pengaturan Situs & Kontak** | Ya | Ya | Tidak |
-| **Manajemen Pengguna, Peran & Reset Password** | **Ya (Eksklusif)** | Tidak | Tidak |
-| **Ubah Password Akun Sendiri** | Ya | Ya | Ya |
+| Fitur / Modul CMS                                        | Super Admin (`super_admin`) | Admin (`admin`) | Editor Berita (`editor_berita`) |
+| :------------------------------------------------------- | :-------------------------: | :-------------: | :-----------------------------: |
+| **Ringkasan & Status Database**                          |             Ya              |       Ya        |      Ya (Ringkasan berita)      |
+| **Page Builder (Beranda & Profil)**                      |             Ya              |       Ya        |              Tidak              |
+| **Kelola Berita & Kategori Berita**                      |             Ya              |       Ya        |               Ya                |
+| **Unggah Foto/PDF di Editor Berita**                     |             Ya              |       Ya        |               Ya                |
+| **Media Library (Lihat / Edit / Hapus / Export-Import)** |         Ya (Penuh)          |   Ya (Penuh)    |       Baca & Pakai Media        |
+| **Logo Mitra**                                           |             Ya              |       Ya        |              Tidak              |
+| **Kerjasama (Google Sheets CSV & Hero)**                 |             Ya              |       Ya        |              Tidak              |
+| **Tarif Layanan (CRUD Kategori & PDF)**                  |             Ya              |       Ya        |              Tidak              |
+| **Magang P2B (Galeri, Posisi & Pendaftar)**              |             Ya              |       Ya        |              Tidak              |
+| **Pengaturan Situs & Kontak**                            |             Ya              |       Ya        |              Tidak              |
+| **Manajemen Pengguna, Peran & Reset Password**           |     **Ya (Eksklusif)**      |      Tidak      |              Tidak              |
+| **Ubah Password Akun Sendiri**                           |             Ya              |       Ya        |               Ya                |
 
 ---
 
@@ -308,14 +329,16 @@ Sistem autentikasi CMS menggunakan **Better Auth** (`/src/auth.ts`, `/src/lib/au
 Setelah berhasil masuk, pengguna diarahkan ke `/cms`. Tab yang tampil pada sidebar/navigasi CMS otomatis menyesuaikan izin peran akun yang login.
 
 ### 7.1 Tab Ringkasan (`overview`)
+
 Menampilkan jumlah total berita, berita terbit, status koneksi MariaDB (host, port, nama database, versi), serta pintasan menuju modul kerja yang diizinkan.
 
 ---
 
 ### 7.2 Tab Page Builder (`homebuilder`)
-Modul *visual page builder* terintegrasi database untuk mengatur halaman **Beranda (`/`)** maupun **3 halaman Profil (`/tentang-kami`, `/visi-misi`, `/struktur-organisasi`)**:
 
-1. **Pilih Halaman Target**: Beralih antar halaman *Beranda*, *Tentang Kami*, *Visi & Misi*, atau *Struktur Organisasi*.
+Modul _visual page builder_ terintegrasi database untuk mengatur halaman **Beranda (`/`)** maupun **3 halaman Profil (`/tentang-kami`, `/visi-misi`, `/struktur-organisasi`)**:
+
+1. **Pilih Halaman Target**: Beralih antar halaman _Beranda_, _Tentang Kami_, _Visi & Misi_, atau _Struktur Organisasi_.
 2. **Edit Per Elemen**: Klik ikon edit pada setiap blok untuk mengubah teks, gambar (upload/Media Library), tautan CTA, hingga item berulang (kartu fokus, nilai tata kelola, poin misi, divisi unit usaha, statistik).
 3. **Tambah Elemen & Auto-Registrasi Katalog**:
    - Pilih dari **19 tipe blok proyek bawaan**: `hero`, `page_hero`, `logo_marquee`, `who_we_are`, `about_intro`, `dual_banners`, `governance_values`, `visi_card`, `misi_grid`, `org_chart`, `unit_divisions`, `news_updates`, `location_map`, `magang_gallery`, `magang_positions`, `editorial_split`, `feature_cards`, `cta_banner`, `stats_row`.
@@ -324,17 +347,20 @@ Modul *visual page builder* terintegrasi database untuk mengatur halaman **Beran
 5. **Atur Urutan, Tampil/Sembunyikan, Hapus & Reset**: Geser urutan naik/turun, nonaktifkan sementara tanpa menghapus (`isVisible`), atau kembalikan halaman ke susunan bawaan.
 
 ![Panel Page Builder Multi-Halaman di CMS](./images/08-cms-page-builder.png)
-> *Gambar 08 — Tangkapan layar tab Page Builder (`/cms`) di `docs/images/08-cms-page-builder.png`.*
+
+> _Gambar 08 — Tangkapan layar tab Page Builder (`/cms`) di `docs/images/08-cms-page-builder.png`._
 
 ---
 
 ### 7.3 Tab Kelola Berita & Kategori (`news`)
-- **Editor Berita**: Input judul, slug URL otomatis/kustom, kategori, tanggal tampil, status (*Terbit* / *Draft*), ringkasan, isi lengkap dengan **TinyMCE**, gambar sampul utama (upload atau pilih dari Media Library), **galeri foto tambahan**, dan **lampiran dokumen PDF**.
+
+- **Editor Berita**: Input judul, slug URL otomatis/kustom, kategori, tanggal tampil, status (_Terbit_ / _Draft_), ringkasan, isi lengkap dengan **TinyMCE**, gambar sampul utama (upload atau pilih dari Media Library), **galeri foto tambahan**, dan **lampiran dokumen PDF**.
 - **Kategori Berita**: Tambah, ubah nama, atur urutan, dan hapus kategori (artikel terkait tetap aman).
-- **Aksi Massal & Portabilitas**: Pencarian berita, seleksi banyak (*checkbox*) untuk hapus massal, serta **Export/Import Bundle JSON** berita untuk pencadangan atau migrasi antar server.
+- **Aksi Massal & Portabilitas**: Pencarian berita, seleksi banyak (_checkbox_) untuk hapus massal, serta **Export/Import Bundle JSON** berita untuk pencadangan atau migrasi antar server.
 
 ![Form Editor Berita dan Manajemen Kategori](./images/09-cms-kelola-berita.png)
-> *Gambar 09 — Tangkapan layar form editor atau daftar berita di `docs/images/09-cms-kelola-berita.png`.*
+
+> _Gambar 09 — Tangkapan layar form editor atau daftar berita di `docs/images/09-cms-kelola-berita.png`._
 
 ---
 
@@ -346,7 +372,7 @@ Berikut panduan operasional lengkap untuk menambahkan artikel berita baru melalu
    Buka `/silahkanmasuk`, masuk dengan akun yang memiliki izin **Kelola Berita** (Super Admin, Admin, atau Editor Berita), lalu pilih tab **Kelola Berita**.
 
 2. **Buka Form Editor**  
-   Klik tombol **Tambah Berita Baru** di pojok kanan atas daftar berita. Form editor akan terbuka dengan judul *Tambah Berita Baru*.
+   Klik tombol **Tambah Berita Baru** di pojok kanan atas daftar berita. Form editor akan terbuka dengan judul _Tambah Berita Baru_.
 
 3. **Isi Judul Berita**  
    Ketik judul artikel pada kolom **Judul Berita**. Slug URL otomatis dibuat dari judul (dapat disesuaikan jika diperlukan) dan dipakai pada rute `/berita/:slug`.
@@ -357,61 +383,68 @@ Berikut panduan operasional lengkap untuk menambahkan artikel berita baru melalu
 5. **Tulis Isi Berita Lengkap (TinyMCE)**  
    Gunakan editor WYSIWYG TinyMCE untuk menyusun artikel: heading, paragraf, daftar bernomor/bulleted, tabel, kutipan, tautan, serta penyisipan gambar di tengah teks. Semua HTML disanitasi otomatis dengan DOMPurify sebelum tayang.
 
-6. **Atur Foto Sampul Utama**  
-   - Klik **Unggah Sampul** untuk memilih gambar dari perangkat, atau  
+6. **Atur Foto Sampul Utama**
+   - Klik **Unggah Sampul** untuk memilih gambar dari perangkat, atau
    - Centang **Gunakan logo placeholder UIN Salatiga** apabila belum ada foto sampul.  
-   Foto sampul tampil pada kartu berita, hero halaman detail, dan OpenGraph.
+     Foto sampul tampil pada kartu berita, hero halaman detail, dan OpenGraph.
 
-7. **Tambah Galeri Dokumentasi Foto (opsional)**  
-   - Klik **Unggah Banyak Foto** untuk menambahkan beberapa foto sekaligus, atau  
+7. **Tambah Galeri Dokumentasi Foto (opsional)**
+   - Klik **Unggah Banyak Foto** untuk menambahkan beberapa foto sekaligus, atau
    - Tempel URL foto pada kolom yang tersedia lalu klik **+ Tambah URL Foto**.  
-   Foto galeri tampil di halaman detail berita dengan keterangan (*caption*) dan mode perbesar (*lightbox*).
+     Foto galeri tampil di halaman detail berita dengan keterangan (_caption_) dan mode perbesar (_lightbox_).
 
-8. **Tambah Lampiran Dokumen PDF (opsional)**  
-   - Klik **Unggah File PDF** untuk mengunggah berkas, atau  
+8. **Tambah Lampiran Dokumen PDF (opsional)**
+   - Klik **Unggah File PDF** untuk mengunggah berkas, atau
    - Isi **Judul dokumen PDF** dan **URL file PDF**, lalu klik **+ Tambah PDF**.  
-   Lampiran PDF tampil sebagai daftar dokumen yang dapat dilihat langsung atau diunduh pada halaman detail berita.
+     Lampiran PDF tampil sebagai daftar dokumen yang dapat dilihat langsung atau diunduh pada halaman detail berita.
 
-9. **Atur Pengaturan Publikasi**  
-   - **Kategori Berita**: pilih kategori yang sesuai (atau klik **Kelola Kategori** untuk menambah/ubah/urutkan kategori).  
-   - **Tanggal Upload**: otomatis terisi hari ini (dapat disesuaikan).  
-   - **Publikasikan berita di website utama**: centang agar artikel langsung tayang; kosongkan untuk menyimpan sebagai *Draft*.
+9. **Atur Pengaturan Publikasi**
+   - **Kategori Berita**: pilih kategori yang sesuai (atau klik **Kelola Kategori** untuk menambah/ubah/urutkan kategori).
+   - **Tanggal Upload**: otomatis terisi hari ini (dapat disesuaikan).
+   - **Publikasikan berita di website utama**: centang agar artikel langsung tayang; kosongkan untuk menyimpan sebagai _Draft_.
 
 10. **Simpan Berita**  
-    Klik tombol **Simpan Berita** di pojok kanan atas form. Artikel yang dipublikasikan langsung muncul di halaman utama (3 berita terbaru) dan arsip `/semua-berita` secara *real-time* via WebSocket, tanpa muat ulang manual.
+    Klik tombol **Simpan Berita** di pojok kanan atas form. Artikel yang dipublikasikan langsung muncul di halaman utama (3 berita terbaru) dan arsip `/semua-berita` secara _real-time_ via WebSocket, tanpa muat ulang manual.
 
-11. **Verifikasi**  
-    - Cek daftar berita pada tab **Kelola Berita** (status **Tayang** / *Draft*).  
-    - Buka halaman publik `/semua-berita` atau `/berita/:slug` untuk memastikan tampilan, galeri, dan lampiran PDF benar.  
+11. **Verifikasi**
+    - Cek daftar berita pada tab **Kelola Berita** (status **Tayang** / _Draft_).
+    - Buka halaman publik `/semua-berita` atau `/berita/:slug` untuk memastikan tampilan, galeri, dan lampiran PDF benar.
     - Gunakan fitur **Export** pada kartu berita untuk mencadangkan artikel (termasuk media) ke berkas JSON.
 
 ![Form Tambah Berita Baru di CMS](./images/15-cms-tambah-berita.png)
-> *Gambar 15 — Tangkapan layar form *Tambah Berita Baru* (foto sampul, editor TinyMCE, galeri, lampiran PDF, & pengaturan publikasi) di `docs/images/15-cms-tambah-berita.png`.*
+
+> _Gambar 15 — Tangkapan layar form _Tambah Berita Baru_ (foto sampul, editor TinyMCE, galeri, lampiran PDF, & pengaturan publikasi) di `docs/images/15-cms-tambah-berita.png`._
 
 ### 7.4 Tab Media Library (`media`)
+
 - Mengunggah gambar (`JPG`, `PNG`, `WEBP`, `GIF`) dan dokumen `PDF` langsung ke MariaDB (`LONGBLOB`) sehingga tersedia permanen lewat `/api/media/:id/:filename`.
 - Filter berdasarkan tipe (`Semua`, `Gambar`, `PDF`), pencarian nama/alt text, salin tautan URL satu klik, edit metadata atau ganti file biner tanpa mengubah URL ID, serta **Export/Import Bundle Media JSON**.
 
 ![Tampilan Media Library CMS](./images/10-cms-media-library.png)
-> *Gambar 10 — Tangkapan layar Media Library di `docs/images/10-cms-media-library.png`.*
+
+> _Gambar 10 — Tangkapan layar Media Library di `docs/images/10-cms-media-library.png`._
 
 ---
 
 ### 7.5 Tab Logo Mitra (`logos`)
-- Menambah, menyunting, mengurutkan ulang, mengaktifkan/menonaktifkan, dan menghapus logo mitra yang tampil berjalan otomatis (*marquee*) pada blok `logo_marquee`.
+
+- Menambah, menyunting, mengurutkan ulang, mengaktifkan/menonaktifkan, dan menghapus logo mitra yang tampil berjalan otomatis (_marquee_) pada blok `logo_marquee`.
 
 ---
 
 ### 7.6 Tab Kerjasama (`kerjasama`)
+
 - **Pengaturan Hero & Sumber Sheet**: Atur gambar Hero, judul, subjudul, label sheet (mis. `Sheet BPK`), serta tautan **Google Sheets Publish-to-Web (CSV)**.
-- **Live Preview & Verifikasi Data**: Menampilkan pratinjau langsung tabel hasil sinkronisasi CSV (`Nama Penyewa`, `Mulai`, `Selesai`, `Perihal`, `Jenis`, ikon `Berkas`) lengkap dengan status jumlah baris dan tombol *Refresh*.
+- **Live Preview & Verifikasi Data**: Menampilkan pratinjau langsung tabel hasil sinkronisasi CSV (`Nama Penyewa`, `Mulai`, `Selesai`, `Perihal`, `Jenis`, ikon `Berkas`) lengkap dengan status jumlah baris dan tombol _Refresh_.
 
 ![Pengaturan Google Sheets CSV dan Live Preview di Tab Kerjasama](./images/11-cms-kerjasama.png)
-> *Gambar 11 — Tangkapan layar tab Kerjasama CMS di `docs/images/11-cms-kerjasama.png`.*
+
+> _Gambar 11 — Tangkapan layar tab Kerjasama CMS di `docs/images/11-cms-kerjasama.png`._
 
 ---
 
 ### 7.7 Tab Tarif Layanan (`tarif`)
+
 - **Pengaturan Hero Tarif**: Sesuaikan gambar latar, eyebrow, judul, subjudul, dan tombol pojok halaman Tarif Layanan.
 - **Manajemen Kategori Tarif Dinamis (CRUD Penuh)**:
   - Tidak lagi terbatas pada 3 item statis — Admin/Super Admin dapat **menambah kategori tarif baru**, **mengedit**, **mengurutkan ulang**, **mengaktifkan/menonaktifkan**, atau **menghapus** kategori tarif.
@@ -419,39 +452,48 @@ Berikut panduan operasional lengkap untuk menambahkan artikel berita baru melalu
   - Perubahan otomatis memperbarui dropdown **Tarif Layanan** pada menu Navigasi publik.
 
 ![Manajemen Tarif Layanan Dinamis dan Preview PDF di CMS](./images/12-cms-tarif-layanan.png)
-> *Gambar 12 — Tangkapan layar tab Tarif Layanan CMS di `docs/images/12-cms-tarif-layanan.png`.*
+
+> _Gambar 12 — Tangkapan layar tab Tarif Layanan CMS di `docs/images/12-cms-tarif-layanan.png`._
 
 ---
 
 ### 7.8 Tab Magang P2B (`magang`)
+
 Terdiri dari 4 sub-bagian utama:
+
 1. **Hero Magang**: Pengaturan gambar banner utama halaman `/magang`.
 2. **Galeri Aktivitas**: Tambah, edit, ubah urutan, toggle aktif/nonaktif foto dokumentasi magang.
-3. **Posisi Magang**: Tambah/edit posisi beserta divisi, foto sampul, daftar tugas (*bullet list*), status aktif, dan saklar ketersediaan (**Tersedia / Penuh**). Posisi yang ditandai penuh tetap tampil informatif namun tidak bisa dipilih pada form pendaftaran.
+3. **Posisi Magang**: Tambah/edit posisi beserta divisi, foto sampul, daftar tugas (_bullet list_), status aktif, dan saklar ketersediaan (**Tersedia / Penuh**). Posisi yang ditandai penuh tetap tampil informatif namun tidak bisa dipilih pada form pendaftaran.
 4. **Kotak Masuk Pendaftar**: Daftar mahasiswa pendaftar lengkap dengan kode registrasi, filter status (`Baru`, `Ditinjau`, `Diterima`, `Ditolak`), tombol ubah status, pratinjau detail jawaban, tombol unduh **CV (PDF)** & **Portofolio (PDF)**, serta hapus lamaran.
 
 ![Tab Magang P2B dan Kotak Masuk Pendaftar](./images/13-cms-magang.png)
-> *Gambar 13 — Tangkapan layar tab Magang P2B di `docs/images/13-cms-magang.png`.*
+
+> _Gambar 13 — Tangkapan layar tab Magang P2B di `docs/images/13-cms-magang.png`._
 
 ---
 
 ### 7.9 Tab Pengaturan Situs (`settings`)
+
 Mengatur teks global Beranda (judul hero, subjudul, gambar hero, judul/paragraf tentang P2B) serta detail kontak resmi (`contact_phone`, `contact_whatsapp`, `contact_email`, `location_address`) yang dipakai oleh Navbar modal kontak, LocationSection, Footer, dan JSON-LD SEO.
 
 ---
 
 ### 7.10 Tab Pengguna & Peran (`users`) — Khusus Super Admin
+
 Menggunakan **Better Auth Admin API**:
+
 - Melihat daftar seluruh akun CMS beserta username, email, nama, peran (`Super Admin`, `Admin`, `Editor Berita`), dan status aktif/nonaktif.
 - **Tambah Pengguna Baru** dengan penentuan peran secara langsung.
-- **Ubah Peran Pengguna**, **Reset Password Pengguna**, **Nonaktifkan / Aktifkan Akun** (*ban/unban*), dan **Hapus Akun** (dengan proteksi agar akun sendiri tidak terhapus/ter-ban tidak sengaja).
+- **Ubah Peran Pengguna**, **Reset Password Pengguna**, **Nonaktifkan / Aktifkan Akun** (_ban/unban_), dan **Hapus Akun** (dengan proteksi agar akun sendiri tidak terhapus/ter-ban tidak sengaja).
 
 ![Tab Manajemen Pengguna dan Peran Super Admin](./images/14-cms-pengguna-peran.png)
-> *Gambar 14 — Tangkapan layar tab Pengguna & Peran di `docs/images/14-cms-pengguna-peran.png`.*
+
+> _Gambar 14 — Tangkapan layar tab Pengguna & Peran di `docs/images/14-cms-pengguna-peran.png`._
 
 ---
 
 ### 7.11 Tab Keamanan Akun (`security`)
+
 Memungkinkan setiap pengguna yang sedang login (`Super Admin`, `Admin`, maupun `Editor Berita`) mengganti password akunnya sendiri dengan memasukkan password saat ini dan password baru melalui `authClient.changePassword`.
 
 ---
@@ -459,6 +501,7 @@ Memungkinkan setiap pengguna yang sedang login (`Super Admin`, `Admin`, maupun `
 ## 8. Referensi API Endpoints & WebSocket
 
 ### Publik & SEO
+
 - `GET /api/public/version` — Versi perubahan konten terbaru untuk sinkronisasi klien.
 - `GET /api/public/bootstrap` — Seluruh data publik awal (pengaturan, Page Builder, berita, kategori, logo, magang, tarif).
 - `GET /api/public/kerjasama` — Proxy & parser CSV Google Sheets kerjasama (support header multi-baris).
@@ -468,11 +511,13 @@ Memungkinkan setiap pengguna yang sedang login (`Super Admin`, `Admin`, maupun `
 - `WS /ws/realtime` — Saluran broadcast event `cms:committed`.
 
 ### Autentikasi & Setup (Better Auth)
+
 - `ALL /api/auth/*` — Handler resmi Better Auth (`sign-in/username`, `sign-in/email`, `sign-out`, `get-session`, `change-password`, `admin/*`).
 - `GET /api/auth-setup/status` — Mengecek apakah sistem membutuhkan pembuatan Super Admin perdana (`needsSetup`).
 - `POST /api/auth-setup/claim` — Pendaftaran atomik akun Super Admin pertama saat database user masih kosong.
 
 ### CMS Terproteksi (Memerlukan Sesi + Izin Peran)
+
 - `GET /api/cms/me` — Profil pengguna aktif beserta daftar izin (`permissions`).
 - `PUT /api/cms/password` — Ganti password pengguna saat ini.
 - `GET /api/cms/overview` — Statistik ringkas & metadata koneksi DB (`overview`).
@@ -492,44 +537,21 @@ Memungkinkan setiap pengguna yang sedang login (`Super Admin`, `Admin`, maupun `
 Berikut rekomendasi pengembangan bertahap untuk meningkatkan kapabilitas operasional PTN BLU, tata kelola redaksi, dan keandalan sistem:
 
 ### Fase 1 — Tata Kelola Redaksi & Keamanan Operasional (Jangka Pendek)
+
 1. **Audit Log Aktivitas CMS**: Mencatat setiap perubahan penting (siapa yang menerbitkan berita, mengubah tarif, menghapus blok Page Builder, atau mengunduh berkas pendaftar magang) beserta timestamp di tabel `cms_audit_logs`.
-2. **Alur Persetujuan Redaksi (Draft -> Review -> Publish)**: Memberi opsi agar *Editor Berita* mengajukan draft untuk ditinjau terlebih dahulu oleh *Admin/Super Admin* sebelum tayang ke publik.
-3. **Penjadwalan Terbit Otomatis (*Scheduled Publishing*)**: Menambahkan kolom `published_at` pada berita sehingga rilis berita kelembagaan dapat dijadwalkan tayang otomatis pada jam tertentu.
+2. **Alur Persetujuan Redaksi (Draft -> Review -> Publish)**: Memberi opsi agar _Editor Berita_ mengajukan draft untuk ditinjau terlebih dahulu oleh _Admin/Super Admin_ sebelum tayang ke publik.
+3. **Penjadwalan Terbit Otomatis (_Scheduled Publishing_)**: Menambahkan kolom `published_at` pada berita sehingga rilis berita kelembagaan dapat dijadwalkan tayang otomatis pada jam tertentu.
 4. **Pembatasan Rate Limiting & Proteksi Brute-Force**: Menambahkan pembatas permintaan khusus pada `/api/auth/*` dan `/api/public/magang/apply` untuk mencegah spam.
 
 ### Fase 2 — Digitalisasi Layanan & Transparansi BLU (Jangka Menengah)
+
 1. **Sistem Booking / Reservasi Sewa Aset Online**: Kalender ketersediaan ruang (Aula, Ruang Theater, Lapangan, Ruang Rapat, dan fasilitas lainnya) yang terintegrasi pengajuan peminjaman serta estimasi biaya otomatis dari modul Tarif Layanan.
-2. **Notifikasi Otomatis Pendaftar Magang (Email / WhatsApp Gateway)**: Mengirimkan pesan konfirmasi otomatis beserta kode registrasi saat mahasiswa mendaftar, dan pemberitahuan ketika status lamaran berubah menjadi *Ditinjau* / *Diterima*.
+2. **Notifikasi Otomatis Pendaftar Magang (Email / WhatsApp Gateway)**: Mengirimkan pesan konfirmasi otomatis beserta kode registrasi saat mahasiswa mendaftar, dan pemberitahuan ketika status lamaran berubah menjadi _Ditinjau_ / _Diterima_.
 3. **Integrasi Pembayaran Non-Tunai PTN BLU (Virtual Account / QRIS)**: Mendukung penerbitan kode tagihan dan verifikasi pembayaran sewa aset atau layanan komersial lainnya secara terpusat.
 4. **Dukungan Multi-Bahasa (Indonesia & Inggris)**: Penambahan switcher bahasa `ID / EN` untuk mendukung program internasionalisasi universitas dan mitra luar negeri.
 
 ### Fase 3 — Performa Infrastruktur & Otomatisasi Kualitas (Jangka Panjang)
+
 1. **Optimasi Media Otomatis (WebP Compression & Object Storage S3/MinIO)**: Mengonversi foto upload otomatis menjadi WebP berukuran terkompresi dan memisahkan penyimpanan biner besar (`LONGBLOB`) ke Object Storage / CDN agar beban database tetap ringan.
 2. **Pencarian Global & Statistik Kunjungan Internal**: Kotak pencarian terpadu (Berita, Tarif Layanan, Kerjasama, Magang) serta analitik ringan jumlah pembaca artikel dan unduhan dokumen tarif tanpa pelacak eksternal invasif.
 3. **Automated Testing & CI/CD Pipeline**: Penambahan unit/integration test API (Vitest + Supertest) dan E2E test (Playwright) pada alur login RBAC, Page Builder, dan pendaftaran magang sebelum proses deployment.
-
----
-
-## 10. Indeks Gambar Tutorial
-
-Seluruh gambar tangkapan layar telah disimpan ke dalam folder `docs/images/` sesuai daftar di bawah ini dan tampil otomatis di dokumen ini:
-
-| No | Nama Berkas Target | Konten Tangkapan Layar yang Disarankan |
-| :---: | :--- | :--- |
-| 01 | `docs/images/01-beranda-publik.png` | Tampilan halaman Beranda (`/`) lengkap dengan Hero dan navigasi atas |
-| 02 | `docs/images/02-halaman-profil-struktur.png` | Tampilan halaman Struktur Organisasi (`/struktur-organisasi`) atau Tentang Kami |
-| 03 | `docs/images/03-berita-detail.png` | Halaman detail berita (`/berita/...`) yang menampilkan artikel, galeri, & PDF |
-| 04 | `docs/images/04-halaman-kerjasama.png` | Halaman `/kerjasama` menampilkan kontrol filter, sorting, & kolom ikon berkas |
-| 05 | `docs/images/05-tarif-layanan-pdf-viewer.png` | Halaman `/tarif-layanan/penunjang-akademik` dengan PDF Viewer terbuka |
-| 06 | `docs/images/06-halaman-magang-daftar.png` | Halaman `/magang` atau formulir pendaftaran `/magang/daftar` |
-| 07 | `docs/images/07-login-cms.png` | Halaman login CMS `/silahkanmasuk` |
-| 08 | `docs/images/08-cms-page-builder.png` | Tab Page Builder (`/cms`) menunjukkan daftar blok, halaman profil, & katalog |
-| 09 | `docs/images/09-cms-kelola-berita.png` | Tab Kelola Berita & editor TinyMCE / kategori di CMS |
-| 10 | `docs/images/10-cms-media-library.png` | Tab Media Library menampilkan grid foto/PDF & tombol salin URL |
-| 11 | `docs/images/11-cms-kerjasama.png` | Tab Kerjasama CMS menampilkan form CSV Google Sheets & preview tabel |
-| 12 | `docs/images/12-cms-tarif-layanan.png` | Tab Tarif Layanan CMS menampilkan daftar kategori dinamis & preview PDF |
-| 13 | `docs/images/13-cms-magang.png` | Tab Magang P2B CMS menampilkan posisi/galeri & kotak masuk pelamar |
-| 14 | `docs/images/14-cms-pengguna-peran.png` | Tab Pengguna & Peran (khusus Super Admin) dengan daftar role akun |
-| 15 | `docs/images/15-cms-tambah-berita.png` | Form *Tambah Berita Baru* di CMS (foto sampul, editor TinyMCE, galeri, lampiran PDF, pengaturan publikasi) |
-
-> *Catatan: Seluruh tangkapan layar di atas dihasilkan menggunakan Playwright MCP terhadap server lokal `http://localhost:3000` (halaman publik tanpa autentikasi; panel CMS menggunakan akun `admin` peran Super Admin). Bingkai tangkapan layar disetel pada resolusi **1920×1080 (zoom 100%)**, dan halaman digulir penuh terlebih dahulu agar animasi masuk (GSAP/ScrollTrigger) selesai sebelum penangkapan gambar, sehingga seluruh seksi (termasuk *Tentang* dan *Berita*) tampil lengkap. File gambar berada di `docs/images/` dan direferensikan langsung oleh dokumen ini.*
