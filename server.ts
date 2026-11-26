@@ -1290,7 +1290,89 @@ async function startServer() {
     });
   });
 
+  app.disable('x-powered-by');
   app.set('trust proxy', 1);
+
+  // Global HTTP security headers (preserve iframe embed compatibility for preview)
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('X-DNS-Prefetch-Control', 'off');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+    next();
+  });
+
+  // Bounded in-memory rate limiter for sensitive endpoints
+  const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+  const rateLimitCleanup = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of rateLimitBuckets.entries()) {
+      if (entry.resetAt <= now) {
+        rateLimitBuckets.delete(key);
+      }
+    }
+  }, 5 * 60 * 1000);
+  rateLimitCleanup.unref();
+
+  const createRateLimiter = (
+    bucketPrefix: string,
+    maxRequests: number,
+    windowMs: number,
+    message: string
+  ) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+      const clientIp =
+        (req.ip || req.socket.remoteAddress || 'unknown').trim().slice(0, 100) ||
+        'unknown';
+      const key = `${bucketPrefix}:${clientIp}`;
+      const now = Date.now();
+      let entry = rateLimitBuckets.get(key);
+
+      if (!entry || entry.resetAt <= now) {
+        if (rateLimitBuckets.size >= 10000) {
+          rateLimitBuckets.clear();
+        }
+        entry = { count: 1, resetAt: now + windowMs };
+        rateLimitBuckets.set(key, entry);
+        next();
+        return;
+      }
+
+      if (entry.count >= maxRequests) {
+        const retryAfterSec = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+        res.setHeader('Retry-After', String(retryAfterSec));
+        res.status(429).json({ ok: false, message });
+        return;
+      }
+
+      entry.count += 1;
+      next();
+    };
+  };
+
+  const authRateLimiter = createRateLimiter(
+    'auth',
+    15,
+    15 * 60 * 1000,
+    'Terlalu banyak percobaan autentikasi. Silakan tunggu beberapa menit sebelum mencoba lagi.'
+  );
+  const magangApplyRateLimiter = createRateLimiter(
+    'magang_apply',
+    10,
+    15 * 60 * 1000,
+    'Terlalu banyak pengiriman pendaftaran dari jaringan ini. Silakan coba lagi beberapa menit lagi.'
+  );
+  const kerjasamaProxyRateLimiter = createRateLimiter(
+    'kerjasama_proxy',
+    60,
+    60 * 1000,
+    'Permintaan data kerjasama terlalu cepat. Silakan tunggu sebentar.'
+  );
+
+  // Protect login, password change, and initial setup endpoints before Better Auth mount
+  app.post('/api/auth/sign-in/*', authRateLimiter);
+  app.post('/api/auth/change-password', authRateLimiter);
+  app.post('/api/auth-setup/claim', authRateLimiter);
 
   // Mount Better Auth handler BEFORE express.json() so request streams stay intact
   app.use('/api/auth', async (_req: Request, _res: Response, next: NextFunction) => {
@@ -1303,6 +1385,41 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
+  // Verify same-origin on cookie-backed mutating CMS requests when Origin header is present
+  app.use('/api/cms', (req: Request, res: Response, next: NextFunction) => {
+    if (
+      req.method === 'GET' ||
+      req.method === 'HEAD' ||
+      req.method === 'OPTIONS' ||
+      req.headers.authorization?.startsWith('Bearer ')
+    ) {
+      next();
+      return;
+    }
+    const originHeader = req.headers.origin;
+    if (originHeader) {
+      try {
+        const originHost = new URL(originHeader).host.toLowerCase();
+        const forwardedHost = String(req.headers['x-forwarded-host'] || '')
+          .split(',')[0]
+          .trim()
+          .toLowerCase();
+        const directHost = String(req.headers.host || '').trim().toLowerCase();
+        if (originHost !== forwardedHost && originHost !== directHost) {
+          res.status(403).json({
+            ok: false,
+            message: 'Permintaan lintas origin tidak diizinkan.',
+          });
+          return;
+        }
+      } catch {
+        res.status(403).json({ ok: false, message: 'Header Origin tidak valid.' });
+        return;
+      }
+    }
+    next();
+  });
+
   const ALLOWED_UPLOAD_MIMES = new Set([
     'image/jpeg',
     'image/png',
@@ -1311,6 +1428,112 @@ async function startServer() {
     'image/svg+xml',
     'application/pdf',
   ]);
+
+  const validateUploadedFileContent = (
+    mimeType: string,
+    buffer: Buffer
+  ): { valid: boolean; reason?: string } => {
+    if (!buffer || buffer.length === 0) {
+      return { valid: false, reason: 'Berkas kosong atau rusak.' };
+    }
+
+    if (mimeType === 'image/jpeg') {
+      const ok =
+        buffer.length >= 3 &&
+        buffer[0] === 0xff &&
+        buffer[1] === 0xd8 &&
+        buffer[2] === 0xff;
+      return ok
+        ? { valid: true }
+        : { valid: false, reason: 'Isi berkas tidak sesuai format JPEG.' };
+    }
+
+    if (mimeType === 'image/png') {
+      const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+      const ok =
+        buffer.length >= sig.length && sig.every((byte, idx) => buffer[idx] === byte);
+      return ok
+        ? { valid: true }
+        : { valid: false, reason: 'Isi berkas tidak sesuai format PNG.' };
+    }
+
+    if (mimeType === 'image/gif') {
+      const head = buffer.subarray(0, 6).toString('ascii');
+      const ok = head === 'GIF87a' || head === 'GIF89a';
+      return ok
+        ? { valid: true }
+        : { valid: false, reason: 'Isi berkas tidak sesuai format GIF.' };
+    }
+
+    if (mimeType === 'image/webp') {
+      const ok =
+        buffer.length >= 12 &&
+        buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+        buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+      return ok
+        ? { valid: true }
+        : { valid: false, reason: 'Isi berkas tidak sesuai format WebP.' };
+    }
+
+    if (mimeType === 'application/pdf') {
+      const headText = buffer.subarray(0, Math.min(buffer.length, 1024)).toString('latin1');
+      return headText.includes('%PDF-')
+        ? { valid: true }
+        : { valid: false, reason: 'Isi berkas tidak sesuai format PDF.' };
+    }
+
+    if (mimeType === 'application/msword') {
+      const ok =
+        buffer.length >= 4 &&
+        buffer[0] === 0xd0 &&
+        buffer[1] === 0xcf &&
+        buffer[2] === 0x11 &&
+        buffer[3] === 0xe0;
+      return ok
+        ? { valid: true }
+        : { valid: false, reason: 'Isi berkas tidak sesuai format DOC.' };
+    }
+
+    if (
+      mimeType ===
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ) {
+      const ok =
+        buffer.length >= 4 &&
+        buffer[0] === 0x50 &&
+        buffer[1] === 0x4b &&
+        (buffer[2] === 0x03 || buffer[2] === 0x05 || buffer[2] === 0x07);
+      return ok
+        ? { valid: true }
+        : { valid: false, reason: 'Isi berkas tidak sesuai format DOCX.' };
+    }
+
+    if (mimeType === 'image/svg+xml') {
+      const svgText = buffer.toString('utf8');
+      if (!/<svg[\s>]/i.test(svgText)) {
+        return { valid: false, reason: 'Isi berkas bukan dokumen SVG yang valid.' };
+      }
+      if (
+        /<script[\s>]/i.test(svgText) ||
+        /<foreignObject[\s>]/i.test(svgText) ||
+        /\son[a-z]+\s*=/i.test(svgText) ||
+        /(?:javascript|vbscript|data:text\/html)\s*:/i.test(svgText)
+      ) {
+        return {
+          valid: false,
+          reason: 'Berkas SVG mengandung skrip atau elemen aktif yang tidak diizinkan.',
+        };
+      }
+      return { valid: true };
+    }
+
+    return { valid: false, reason: 'Tipe berkas tidak diizinkan.' };
+  };
+
+  const sanitizeDispositionFilename = (rawName: unknown, fallback = 'file'): string =>
+    String(rawName || fallback)
+      .replace(/[\r\n";\\]/g, '_')
+      .slice(0, 120) || fallback;
 
   const upload = multer({
     storage: multer.memoryStorage(),
@@ -1338,11 +1561,19 @@ async function startServer() {
       const buffer = Buffer.isBuffer(row.data)
         ? row.data
         : Buffer.from(row.data as Uint8Array);
-      const safeName = String(row.original_name || 'file').replace(/"/g, '');
+      const safeName = sanitizeDispositionFilename(row.original_name, 'file');
+      const mimeType = String(row.mime_type || 'application/octet-stream');
       const isDownload = req.query.download === '1';
 
-      res.setHeader('Content-Type', String(row.mime_type || 'application/octet-stream'));
+      res.setHeader('Content-Type', mimeType);
       res.setHeader('Content-Length', String(buffer.length));
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (mimeType === 'image/svg+xml') {
+        res.setHeader(
+          'Content-Security-Policy',
+          "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        );
+      }
       res.setHeader(
         'Content-Disposition',
         `${isDownload ? 'attachment' : 'inline'}; filename="${safeName}"`
@@ -1383,7 +1614,16 @@ async function startServer() {
       if (!ALLOWED_UPLOAD_MIMES.has(file.mimetype)) {
         res.status(400).json({
           ok: false,
-          message: 'Format berkas harus berupa gambar (JPG/PNG/WebP/GIF) atau PDF.',
+          message: 'Format berkas harus berupa gambar (JPG/PNG/WebP/GIF/SVG) atau PDF.',
+        });
+        return;
+      }
+
+      const contentCheck = validateUploadedFileContent(file.mimetype, file.buffer);
+      if (!contentCheck.valid) {
+        res.status(400).json({
+          ok: false,
+          message: contentCheck.reason || 'Konten berkas tidak valid.',
         });
         return;
       }
@@ -1553,6 +1793,10 @@ async function startServer() {
           skippedCount++;
           continue;
         }
+        if (!validateUploadedFileContent(mimeType, buf).valid) {
+          skippedCount++;
+          continue;
+        }
 
         const id =
           typeof entry.id === 'string' && /^[a-zA-Z0-9_-]{4,48}$/.test(entry.id)
@@ -1645,6 +1889,17 @@ async function startServer() {
             res.status(400).json({
               ok: false,
               message: 'Format berkas pengganti harus berupa gambar atau PDF.',
+            });
+            return;
+          }
+          const contentCheck = validateUploadedFileContent(
+            replacementFile.mimetype,
+            replacementFile.buffer
+          );
+          if (!contentCheck.valid) {
+            res.status(400).json({
+              ok: false,
+              message: contentCheck.reason || 'Isi berkas pengganti tidak valid.',
             });
             return;
           }
@@ -2018,18 +2273,42 @@ async function startServer() {
   };
 
   const fetchAndParseKerjasamaCsv = async (csvUrl: string) => {
-    if (!isAllowedRemoteCsvUrl(csvUrl)) {
+    let currentUrl = csvUrl.trim();
+    if (!isAllowedRemoteCsvUrl(currentUrl)) {
       throw new Error('Tautan CSV harus berupa URL publik http:// atau https:// yang valid.');
     }
 
-    const upstream = await fetch(csvUrl, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(12000),
-      headers: {
-        Accept: 'text/csv,text/plain;q=0.9,*/*;q=0.8',
-        'User-Agent': 'P2B-UIN-Salatiga-Portal/1.0',
-      },
-    });
+    let upstream: globalThis.Response | null = null;
+    for (let hop = 0; hop <= 3; hop += 1) {
+      const response = await fetch(currentUrl, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(12000),
+        headers: {
+          Accept: 'text/csv,text/plain;q=0.9,*/*;q=0.8',
+          'User-Agent': 'P2B-UIN-Salatiga-Portal/1.0',
+        },
+      });
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (!location) {
+          throw new Error('Respons pengalihan CSV tidak valid.');
+        }
+        const resolvedNext = new URL(location, currentUrl).toString();
+        if (!isAllowedRemoteCsvUrl(resolvedNext)) {
+          throw new Error('Pengalihan tautan CSV menuju alamat jaringan yang tidak diizinkan.');
+        }
+        currentUrl = resolvedNext;
+        continue;
+      }
+
+      upstream = response;
+      break;
+    }
+
+    if (!upstream) {
+      throw new Error('Terlalu banyak pengalihan URL saat mengambil CSV Google Sheets.');
+    }
 
     if (!upstream.ok) {
       throw new Error(
@@ -2047,7 +2326,7 @@ async function startServer() {
     return parseKerjasamaSheetCsv(rawText);
   };
 
-  app.get('/api/public/kerjasama', async (_req: Request, res: Response) => {
+  app.get('/api/public/kerjasama', kerjasamaProxyRateLimiter, async (_req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     let csvUrl = DEFAULT_KERJASAMA_CSV_URL;
     let sheetLabel = DEFAULT_KERJASAMA_SHEET_LABEL;
@@ -2162,7 +2441,7 @@ async function startServer() {
     'Sains dan Teknologi',
   ]);
 
-  app.post('/api/public/magang/apply', (req: Request, res: Response) => {
+  app.post('/api/public/magang/apply', magangApplyRateLimiter, (req: Request, res: Response) => {
     upload.fields([
       { name: 'resumeFile', maxCount: 1 },
       { name: 'portfolioFile', maxCount: 1 },
@@ -2234,19 +2513,45 @@ async function startServer() {
       const resumeFile = filesMap.resumeFile?.[0] || null;
       const portfolioFile = filesMap.portfolioFile?.[0] || null;
 
-      if (resumeFile && !ALLOWED_APPLICANT_MIMES.has(resumeFile.mimetype)) {
-        res.status(400).json({
-          ok: false,
-          message: 'Format berkas lamaran/resume harus berupa PDF, DOC/DOCX, atau gambar (JPG/PNG/WebP).',
-        });
-        return;
+      if (resumeFile) {
+        if (!ALLOWED_APPLICANT_MIMES.has(resumeFile.mimetype)) {
+          res.status(400).json({
+            ok: false,
+            message: 'Format berkas lamaran/resume harus berupa PDF, DOC/DOCX, atau gambar (JPG/PNG/WebP).',
+          });
+          return;
+        }
+        const resumeCheck = validateUploadedFileContent(
+          resumeFile.mimetype,
+          resumeFile.buffer
+        );
+        if (!resumeCheck.valid) {
+          res.status(400).json({
+            ok: false,
+            message: resumeCheck.reason || 'Isi berkas lamaran/resume tidak valid.',
+          });
+          return;
+        }
       }
-      if (portfolioFile && !ALLOWED_APPLICANT_MIMES.has(portfolioFile.mimetype)) {
-        res.status(400).json({
-          ok: false,
-          message: 'Format berkas portofolio harus berupa PDF, DOC/DOCX, atau gambar (JPG/PNG/WebP).',
-        });
-        return;
+      if (portfolioFile) {
+        if (!ALLOWED_APPLICANT_MIMES.has(portfolioFile.mimetype)) {
+          res.status(400).json({
+            ok: false,
+            message: 'Format berkas portofolio harus berupa PDF, DOC/DOCX, atau gambar (JPG/PNG/WebP).',
+          });
+          return;
+        }
+        const portfolioCheck = validateUploadedFileContent(
+          portfolioFile.mimetype,
+          portfolioFile.buffer
+        );
+        if (!portfolioCheck.valid) {
+          res.status(400).json({
+            ok: false,
+            message: portfolioCheck.reason || 'Isi berkas portofolio tidak valid.',
+          });
+          return;
+        }
       }
 
       if (resumeUrlRaw && !isSafeHttpUrl(resumeUrlRaw)) {
@@ -3954,7 +4259,7 @@ async function startServer() {
       const buffer = Buffer.isBuffer(row.data)
         ? row.data
         : Buffer.from(row.data as Uint8Array);
-      const safeName = String(row.original_name || 'berkas').replace(/"/g, '');
+      const safeName = sanitizeDispositionFilename(row.original_name, 'berkas');
       res.setHeader('Content-Type', String(row.mime_type || 'application/octet-stream'));
       res.setHeader('Content-Length', String(buffer.length));
       res.setHeader('X-Content-Type-Options', 'nosniff');
